@@ -1,9 +1,11 @@
 import argparse
 import logging
 
-from functions import *
-from utils import *
-
+from functions import read_and_split, process_data, run_model
+from utils import calc_steps
+from transformers import (
+    AutoTokenizer,
+)
 RANDOM_SEED = 42
 
 BERT_MODEL_NAME = "distilbert-base-multilingual-cased"

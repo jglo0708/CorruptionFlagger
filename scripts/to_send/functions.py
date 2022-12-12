@@ -8,11 +8,14 @@ jan.globisz@studbocconi.it
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
+import pytorch_lightning as pl
+
 from sklearn.model_selection import train_test_split
 import pathlib
+import pandas as pd
 
-from bert_classifier import *
-from utils import *
+from bert_classifier import ProcurementNoticeDataset, ProcurementNoticeDataModule, ProcurementFlagsTagger
+from utils import is_csv
 
 TEST_SIZE = 0.05
 RANDOM_SEED = 42
@@ -24,39 +27,38 @@ def read_and_split(args):
     :param args: args from the parser
     :return: test and train Pandas dataframe
     '''
+
     assert (
         pathlib.Path(args.data_path).resolve().is_file()
     ), f"{args.data_path} should be a file (not dir)"
     assert is_csv(args.data_path), f"{args.data_path} should be a CSV file"
-    df = pd.read_csv(args.data_path)
-    assert set(df).issuperset(
+    df = pd.read_csv(args.data_path, sep=None)
+    assert set(df.columns).issuperset(
         [args.text_column, args.label_column]
     ), f"{args.text_column, args.label_column} need to be valid columns of the dataframe"
     labels_map = dict(
-        zip(args.label_column, list(range(0, len(args.label_column) + 1)))
+        zip(df[args.label_column], list(range(0, len(df[args.label_column].unique()) + 1)))
     )
-    df["label"] = df[args.label_column].map(labels_map)
+    df["label_encoded"] = df[args.label_column].map(labels_map)
 
-    train_df, test_df = train_test_split(df, test_size=TEST_SIZE, seed=RANDOM_SEED)
+    train_df, test_df = train_test_split(df, test_size=TEST_SIZE, random_state=RANDOM_SEED)
     return train_df, test_df
 
 
 def process_data(args, train_df, test_df, tokenizer):
-
     train_dataset = ProcurementNoticeDataset(
-        train_df,
-        tokenizer,
+        data=train_df,
+        tokenizer=tokenizer,
         max_token_len=args.max_token_count,
-        label_column=args.label_column,
+        label_column='label_encoded',
     )
 
     test_dataset = ProcurementNoticeDataset(
-        test_df,
-        tokenizer,
+        data=test_df,
+        tokenizer=tokenizer,
         max_token_len=args.max_token_count,
-        label_column=args.label_column,
+        label_column='label_encoded',
     )
-
     data_module = ProcurementNoticeDataModule(
         train_df=train_dataset,
         test_df=test_dataset,
@@ -68,12 +70,11 @@ def process_data(args, train_df, test_df, tokenizer):
 
 
 def run_model(args, warmup_steps, total_training_steps, data_module):
-
     model = ProcurementFlagsTagger(
-        n_classes=len(args.label_columns),
+        n_classes=len(data_module.train_df.data[data_module.train_df.label_column].unique()),
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
-        label_column=args.label_column,
+        label_column='label_encoded',
     )
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.checkpoint_path,
