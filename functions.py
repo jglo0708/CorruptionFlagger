@@ -33,6 +33,9 @@ def read_and_split(args):
     :param args: args from the parser
     :return: test and train Pandas dataframe
     """
+    train_df = pd.DataFrame()
+    val_df = pd.DataFrame()
+    test_df = pd.DataFrame()
     for f in os.listdir(args.data_path):
         file = os.path.join(args.data_path, f)
         print(file)
@@ -53,33 +56,45 @@ def read_and_split(args):
             )
             df["label_encoded"] = df[args.label_column].map(labels_map)
 
-            train_df, test_df = train_test_split(
+            train_df_tmp, test_df_tmp = train_test_split(
                 df, test_size=TEST_SIZE, random_state=RANDOM_SEED
             )
-            val_df, test_df = train_test_split(
-                test_df, test_size=0.5, random_state=RANDOM_SEED
+            val_df_tmp, test_df_tmp = train_test_split(
+                test_df_tmp, test_size=0.5, random_state=RANDOM_SEED
             )
-
-            return train_df, val_df, test_df
+            train_df_tmp.append(train_df_tmp)
+            val_df.append(val_df_tmp)
+            test_df.append(test_df_tmp)
         else:
             with open(file) as json_file:
                 json_data = json.load(json_file)
 
-            train_df = pd.DataFrame.from_dict(json_data["train"], orient="index")
-            # val_df = pd.DataFrame.from_dict(json_data['val'], orient ='index')
-            # test_df = pd.DataFrame.from_dict(json_data['test'], orient ='index')
-            val_df = pd.DataFrame.from_dict(json_data["test"]["val"], orient="index")
+            train_df_tmp = pd.DataFrame.from_dict(json_data["train"], orient="index")
+            # val_df_tmp = pd.DataFrame.from_dict(json_data['val'], orient ='index')
+            # test_df_tmp = pd.DataFrame.from_dict(json_data['test'], orient ='index')
+            val_df_tmp = pd.DataFrame.from_dict(
+                json_data["test"]["val"], orient="index"
+            )
             test_d = {
                 k: json_data["test"][k]
                 for k in set(list(json_data["test"].keys())) - set(["val"])
             }
-            test_df = pd.DataFrame.from_dict(test_d, orient="index")
+            test_df_tmp = pd.DataFrame.from_dict(test_d, orient="index")
 
-            train_df.rename(columns={args.label_column: "label_encoded"}, inplace=True)
-            val_df.rename(columns={args.label_column: "label_encoded"}, inplace=True)
-            test_df.rename(columns={args.label_column: "label_encoded"}, inplace=True)
+            train_df_tmp.rename(
+                columns={args.label_column: "label_encoded"}, inplace=True
+            )
+            val_df_tmp.rename(
+                columns={args.label_column: "label_encoded"}, inplace=True
+            )
+            test_df_tmp.rename(
+                columns={args.label_column: "label_encoded"}, inplace=True
+            )
+            train_df = train_df.append(train_df_tmp)
+            val_df = val_df.append(val_df_tmp)
+            test_df = test_df.append(test_df_tmp)
 
-            return train_df, val_df, test_df
+        return train_df, val_df, test_df
 
 
 def process_data(args, train_df, test_df, tokenizer):

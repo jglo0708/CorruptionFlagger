@@ -14,7 +14,6 @@ TOKENIZER = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
 
 
 def main(args):
-    print( args.verbose)
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
     data_module = process_data(args, train_df, val_df, TOKENIZER)
