@@ -14,12 +14,12 @@ TOKENIZER = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
 
 
 def main(args):
-
+    print( args.verbose)
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
     data_module = process_data(args, train_df, val_df, TOKENIZER)
     total_training_steps, warmup_steps = calc_steps(train_df, args)
-    logging.info("Model finetuning start")
+    logging.info("Model fine-tuning start")
     run_model(args, total_training_steps, warmup_steps, data_module)
     logger.info("Finetuning complete!")
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     logger.info("Program start")
     logger.info("Collecting arguments")
     parser = argparse.ArgumentParser(
-        prog="BertClassifer", description="Finetune using DeepVacuity"
+        prog="BertClassifer", description="Finetune using a dataset"
     )
     parser.add_argument("data_path", type=str, help="path to the dataset dir")
     parser.add_argument("data_is_json", type=bool, help="is dataset in json format")
