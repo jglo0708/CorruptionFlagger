@@ -6,6 +6,7 @@ Set up:
 2.  Run `source venv_cf/bin/activate`
 3.  Run `pip install -r requirements.txt`
 
+It is required to have installed CUDA on your device!
 
 To run the script, use
 `python3 run.py PATH_TO_DATA IS_DATA_JSON LABEL_COLUMN TEXT_COLUMN`
