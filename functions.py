@@ -13,36 +13,73 @@ import pytorch_lightning as pl
 from sklearn.model_selection import train_test_split
 import pathlib
 import pandas as pd
+import json
+import os
 
-from bert_classifier import ProcurementNoticeDataset, ProcurementNoticeDataModule, ProcurementFlagsTagger
+from bert_classifier import (
+    ProcurementNoticeDataset,
+    ProcurementNoticeDataModule,
+    ProcurementFlagsTagger,
+)
 from utils import is_csv
 
-TEST_SIZE = 0.05
+TEST_SIZE = 0.1
 RANDOM_SEED = 42
 
 
 def read_and_split(args):
-    '''
+    """
 
     :param args: args from the parser
     :return: test and train Pandas dataframe
-    '''
+    """
+    for f in os.listdir(args.data_path):
+        file = os.path.join(args.data_path, f)
+        print(file)
+        assert (
+            pathlib.Path(file).resolve().is_file()
+        ), f"{file} should be a file (not dir)"
+        if not args.data_is_json:
+            assert is_csv(file), f"{file} should be a CSV file"
+            df = pd.read_csv(file, sep=None)
+            assert set(df.columns).issuperset(
+                [args.text_column, args.label_column]
+            ), f"{args.text_column, args.label_column} need to be valid columns of the dataframe"
+            labels_map = dict(
+                zip(
+                    df[args.label_column],
+                    list(range(0, len(df[args.label_column].unique()) + 1)),
+                )
+            )
+            df["label_encoded"] = df[args.label_column].map(labels_map)
 
-    assert (
-        pathlib.Path(args.data_path).resolve().is_file()
-    ), f"{args.data_path} should be a file (not dir)"
-    assert is_csv(args.data_path), f"{args.data_path} should be a CSV file"
-    df = pd.read_csv(args.data_path, sep=None)
-    assert set(df.columns).issuperset(
-        [args.text_column, args.label_column]
-    ), f"{args.text_column, args.label_column} need to be valid columns of the dataframe"
-    labels_map = dict(
-        zip(df[args.label_column], list(range(0, len(df[args.label_column].unique()) + 1)))
-    )
-    df["label_encoded"] = df[args.label_column].map(labels_map)
+            train_df, test_df = train_test_split(
+                df, test_size=TEST_SIZE, random_state=RANDOM_SEED
+            )
+            val_df, test_df = train_test_split(
+                test_df, test_size=0.5, random_state=RANDOM_SEED
+            )
 
-    train_df, test_df = train_test_split(df, test_size=TEST_SIZE, random_state=RANDOM_SEED)
-    return train_df, test_df
+            return train_df, val_df, test_df
+        else:
+            with open(file) as json_file:
+                json_data = json.load(json_file)
+
+            train_df = pd.DataFrame.from_dict(json_data["train"], orient="index")
+            # val_df = pd.DataFrame.from_dict(json_data['val'], orient ='index')
+            # test_df = pd.DataFrame.from_dict(json_data['test'], orient ='index')
+            val_df = pd.DataFrame.from_dict(json_data["test"]["val"], orient="index")
+            test_d = {
+                k: json_data["test"][k]
+                for k in set(list(json_data["test"].keys())) - set(["val"])
+            }
+            test_df = pd.DataFrame.from_dict(test_d, orient="index")
+
+            train_df.rename(columns={args.label_column: "label_encoded"}, inplace=True)
+            val_df.rename(columns={args.label_column: "label_encoded"}, inplace=True)
+            test_df.rename(columns={args.label_column: "label_encoded"}, inplace=True)
+
+            return train_df, val_df, test_df
 
 
 def process_data(args, train_df, test_df, tokenizer):
@@ -50,14 +87,14 @@ def process_data(args, train_df, test_df, tokenizer):
         data=train_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
-        label_column='label_encoded',
+        label_column="label_encoded",
     )
 
     test_dataset = ProcurementNoticeDataset(
         data=test_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
-        label_column='label_encoded',
+        label_column="label_encoded",
     )
     data_module = ProcurementNoticeDataModule(
         train_df=train_dataset,
@@ -71,10 +108,12 @@ def process_data(args, train_df, test_df, tokenizer):
 
 def run_model(args, warmup_steps, total_training_steps, data_module):
     model = ProcurementFlagsTagger(
-        n_classes=len(data_module.train_df.data[data_module.train_df.label_column].unique()),
+        n_classes=len(
+            data_module.train_df.data[data_module.train_df.label_column].unique()
+        ),
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
-        label_column='label_encoded',
+        label_column="label_encoded",
     )
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.checkpoint_path,
