@@ -91,20 +91,20 @@ def read_and_split(args):
 
 def process_data(args, train_df, val_df, test_df, tokenizer):
     train_dataset = ProcurementNoticeDataset(
-        data=train_df,
+        df=train_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
         label_column="label_encoded",
     )
     val_dataset = ProcurementNoticeDataset(
-        data=val_df,
+        df=val_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
         label_column="label_encoded",
     )
 
     test_dataset = ProcurementNoticeDataset(
-        data=test_df,
+        df=test_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
         label_column="label_encoded",
