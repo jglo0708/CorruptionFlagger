@@ -36,22 +36,20 @@ class ProcurementNoticeDataset(Dataset):
     def __init__(
         self,
         df: pd.DataFrame,
-        label_column: str,
         tokenizer: AutoTokenizer,
         max_token_len: int = 256,
     ):
         self.tokenizer = tokenizer
         self.df = df
         self.max_token_len = max_token_len
-        self.label_column = label_column
 
     def __len__(self):
-        return len(self.data)
+        return len(self.df)
 
     def __getitem__(self, index: int):
-        data_row = self.df.data.iloc[index]
+        data_row = self.df.df.iloc[index]
         notice_text = data_row.text
-        labels = data_row[self.label_column]
+        labels = data_row["label_encoded"]
 
         encoding = self.tokenizer.encode_plus(
             notice_text,
@@ -74,7 +72,13 @@ class ProcurementNoticeDataset(Dataset):
 
 class ProcurementNoticeDataModule(pl.LightningDataModule):
     def __init__(
-        self, train_df, val_df, test_df, tokenizer, batch_size=8, max_token_len=256
+        self,
+        train_df,
+        val_df,
+        test_df,
+        tokenizer,
+        batch_size=8,
+        max_token_len=256,
     ):
         super().__init__()
         self.test_dataset = None

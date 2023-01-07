@@ -74,13 +74,16 @@ def read_and_split(args):
             test_df_tmp = pd.DataFrame.from_dict(json_data["test"], orient="index")
 
             train_df_tmp.rename(
-                columns={args.label_column: "label_encoded"}, inplace=True
+                columns={args.label_column: "label_encoded", args.text_column: "text"},
+                inplace=True,
             )
             val_df_tmp.rename(
-                columns={args.label_column: "label_encoded"}, inplace=True
+                columns={args.label_column: "label_encoded", args.text_column: "text"},
+                inplace=True,
             )
             test_df_tmp.rename(
-                columns={args.label_column: "label_encoded"}, inplace=True
+                columns={args.label_column: "label_encoded", args.text_column: "text"},
+                inplace=True,
             )
             train_df = train_df.append(train_df_tmp)
             val_df = val_df.append(val_df_tmp)
@@ -90,24 +93,30 @@ def read_and_split(args):
 
 
 def process_data(args, train_df, val_df, test_df, tokenizer):
+    '''
+    Creates a DataModule object
+    :param args:
+    :param train_df:
+    :param val_df:
+    :param test_df:
+    :param tokenizer:
+    :return:
+    '''
     train_dataset = ProcurementNoticeDataset(
         df=train_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
-        label_column="label_encoded",
     )
     val_dataset = ProcurementNoticeDataset(
         df=val_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
-        label_column="label_encoded",
     )
 
     test_dataset = ProcurementNoticeDataset(
         df=test_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
-        label_column="label_encoded",
     )
     data_module = ProcurementNoticeDataModule(
         train_df=train_dataset,
@@ -130,9 +139,7 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
     :return: None
     """
     model = ProcurementFlagsTagger(
-        n_classes=len(
-            data_module.train_df.data[data_module.train_df.label_column].unique()
-        ),
+        n_classes=2,
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
         label_column="label_encoded",
