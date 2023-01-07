@@ -29,7 +29,7 @@ RANDOM_SEED = 42
 
 def read_and_split(args):
     """
-
+    Reads and splits the files into train, val, test sets
     :param args: args from the parser
     :return: test and train Pandas dataframe
     """
@@ -70,16 +70,8 @@ def read_and_split(args):
                 json_data = json.load(json_file)
 
             train_df_tmp = pd.DataFrame.from_dict(json_data["train"], orient="index")
-            # val_df_tmp = pd.DataFrame.from_dict(json_data['val'], orient ='index')
-            # test_df_tmp = pd.DataFrame.from_dict(json_data['test'], orient ='index')
-            val_df_tmp = pd.DataFrame.from_dict(
-                json_data["test"]["val"], orient="index"
-            )
-            test_d = {
-                k: json_data["test"][k]
-                for k in set(list(json_data["test"].keys())) - set(["val"])
-            }
-            test_df_tmp = pd.DataFrame.from_dict(test_d, orient="index")
+            val_df_tmp = pd.DataFrame.from_dict(json_data["val"], orient="index")
+            test_df_tmp = pd.DataFrame.from_dict(json_data["test"], orient="index")
 
             train_df_tmp.rename(
                 columns={args.label_column: "label_encoded"}, inplace=True
@@ -97,9 +89,15 @@ def read_and_split(args):
         return train_df, val_df, test_df
 
 
-def process_data(args, train_df, test_df, tokenizer):
+def process_data(args, train_df, val_df, test_df, tokenizer):
     train_dataset = ProcurementNoticeDataset(
         data=train_df,
+        tokenizer=tokenizer,
+        max_token_len=args.max_token_count,
+        label_column="label_encoded",
+    )
+    val_dataset = ProcurementNoticeDataset(
+        data=val_df,
         tokenizer=tokenizer,
         max_token_len=args.max_token_count,
         label_column="label_encoded",
@@ -113,6 +111,7 @@ def process_data(args, train_df, test_df, tokenizer):
     )
     data_module = ProcurementNoticeDataModule(
         train_df=train_dataset,
+        val_df=val_dataset,
         test_df=test_dataset,
         tokenizer=tokenizer,
         batch_size=args.batch_size,
@@ -122,6 +121,14 @@ def process_data(args, train_df, test_df, tokenizer):
 
 
 def run_model(args, warmup_steps, total_training_steps, data_module):
+    """
+
+    :param args: command-line arguments
+    :param warmup_steps: number of warmup steps
+    :param total_training_steps: calculated total training steps
+    :param data_module: Lightning Pytorch data module object
+    :return: None
+    """
     model = ProcurementFlagsTagger(
         n_classes=len(
             data_module.train_df.data[data_module.train_df.label_column].unique()
@@ -140,11 +147,11 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
     )
 
     logger = TensorBoardLogger("lightning_logs", name="corruption_indicators")
-    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=2)
+    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=3)
     trainer = pl.Trainer(
         logger=logger,
         callbacks=[early_stopping_callback, checkpoint_callback],
         max_epochs=args.n_epochs,
-        gpus=int(args.gpu),
+        accelerator="gpu" if args.gpu else "cpu",
     )
     trainer.fit(model, data_module)

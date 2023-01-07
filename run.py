@@ -16,11 +16,11 @@ TOKENIZER = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
 def main(args):
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
-    data_module = process_data(args, train_df, val_df, TOKENIZER)
+    data_module = process_data(args, train_df, val_df, test_df, TOKENIZER)
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
     run_model(args, total_training_steps, warmup_steps, data_module)
-    logger.info("Finetuning complete!")
+    logger.info("Fine-tuning complete!")
 
 
 if __name__ == "__main__":

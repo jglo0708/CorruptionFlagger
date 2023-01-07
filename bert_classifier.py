@@ -38,7 +38,7 @@ class ProcurementNoticeDataset(Dataset):
         data: pd.DataFrame,
         label_column: str,
         tokenizer: AutoTokenizer,
-        max_token_len: int = 128,
+        max_token_len: int = 256,
     ):
         self.tokenizer = tokenizer
         self.data = data
@@ -50,7 +50,6 @@ class ProcurementNoticeDataset(Dataset):
 
     def __getitem__(self, index: int):
         data_row = self.data.iloc[index]
-
         notice_text = data_row.text
         labels = data_row[self.label_column]
 
@@ -74,10 +73,16 @@ class ProcurementNoticeDataset(Dataset):
 
 
 class ProcurementNoticeDataModule(pl.LightningDataModule):
-    def __init__(self, train_df, test_df, tokenizer, batch_size=8, max_token_len=256):
+    def __init__(
+        self, train_df, val_df, test_df, tokenizer, batch_size=8, max_token_len=256
+    ):
         super().__init__()
+        self.test_dataset = None
+        self.val_dataset = None
+        self.train_dataset = None
         self.batch_size = batch_size
         self.train_df = train_df
+        self.val_df = val_df
         self.test_df = test_df
         self.tokenizer = tokenizer
         self.max_token_len = max_token_len
@@ -87,20 +92,24 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
             self.train_df, self.tokenizer, self.max_token_len
         )
 
+        self.val_dataset = ProcurementNoticeDataset(
+            self.val_df, self.tokenizer, self.max_token_len
+        )
+
         self.test_dataset = ProcurementNoticeDataset(
             self.test_df, self.tokenizer, self.max_token_len
         )
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2
+            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4
         )
 
     def val_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=4)
 
 
 class ProcurementFlagsTagger(pl.LightningModule):
@@ -113,6 +122,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
     ):
 
         super().__init__()
+        self.n_classes = n_classes
         self.bert = AutoModel.from_pretrained(
             BERT_MODEL_NAME, return_dict=True, output_hidden_states=True
         )
@@ -177,7 +187,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         predictions = torch.stack(predictions)
 
         for i, name in enumerate(self.label_column):
-            auroc = AUROC(num_classes=2)
+            auroc = AUROC(num_classes=self.n_classes)
             class_roc_auc = auroc(predictions[:, i], labels[:, i])
             self.logger.experiment.add_scalar(
                 f"{name}_roc_auc/Train", class_roc_auc, self.current_epoch
