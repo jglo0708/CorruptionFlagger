@@ -35,13 +35,13 @@ TOKENIZER = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
 class ProcurementNoticeDataset(Dataset):
     def __init__(
         self,
-        data: pd.DataFrame,
+        df: pd.DataFrame,
         label_column: str,
         tokenizer: AutoTokenizer,
         max_token_len: int = 256,
     ):
         self.tokenizer = tokenizer
-        self.data = data
+        self.df = df
         self.max_token_len = max_token_len
         self.label_column = label_column
 
@@ -49,7 +49,7 @@ class ProcurementNoticeDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index: int):
-        data_row = self.data.iloc[index]
+        data_row = self.df.data.iloc[index]
         notice_text = data_row.text
         labels = data_row[self.label_column]
 
@@ -102,14 +102,14 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4
+            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2
         )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=2)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=4)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=2)
 
 
 class ProcurementFlagsTagger(pl.LightningModule):
