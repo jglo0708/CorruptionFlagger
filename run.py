@@ -6,10 +6,11 @@ from utils import calc_steps
 from transformers import (
     AutoTokenizer,
 )
-
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 RANDOM_SEED = 42
 
-BERT_MODEL_NAME = "distilbert-base-multilingual-cased"
+BERT_MODEL_NAME = "distilbert-base-cased"
 TOKENIZER = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
 
 

@@ -49,7 +49,7 @@ class ProcurementNoticeDataset(Dataset):
     def __getitem__(self, index: int):
         data_row = self.df.df.iloc[index]
         notice_text = data_row.text
-        labels = data_row["label_encoded"]
+        labels = torch.tensor(int(data_row["label_encoded"])).long()
 
         encoding = self.tokenizer.encode_plus(
             notice_text,
@@ -66,7 +66,7 @@ class ProcurementNoticeDataset(Dataset):
             notice_text=notice_text,
             input_ids=encoding["input_ids"].flatten(),
             attention_mask=encoding["attention_mask"].flatten(),
-            labels=torch.FloatTensor(labels),
+            labels=labels
         )
 
 
@@ -77,7 +77,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         val_df,
         test_df,
         tokenizer,
-        batch_size=8,
+        batch_size=16,
         max_token_len=256,
     ):
         super().__init__()
@@ -91,7 +91,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.tokenizer = tokenizer
         self.max_token_len = max_token_len
 
-    def setup(self, stage=None):
+    def setup(self, stage = None):
         self.train_dataset = ProcurementNoticeDataset(
             self.train_df, self.tokenizer, self.max_token_len
         )
@@ -123,6 +123,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         label_column: str,
         n_training_steps=None,
         n_warmup_steps=None,
+        dropout_p = 0.1
     ):
 
         super().__init__()
@@ -134,7 +135,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         # classifier has to be 4 * hidden_dim, because we concat 4 layers
         self.label_column = label_column
         self.n_training_steps = n_training_steps
-        self.dropout = nn.Dropout()
+        self.dropout = nn.Dropout(dropout_p)
         self.n_warmup_steps = n_warmup_steps
         self.criterion = nn.BCELoss()
 
@@ -146,6 +147,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         )
         pooled_output = pooled_output[:, 0, :]
         pooled_output = self.dropout(pooled_output)
+        print(pooled_output.size)
         output = self.classifier(pooled_output)
         output = torch.sigmoid(output)
         loss = 0
