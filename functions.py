@@ -160,5 +160,6 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         callbacks=[early_stopping_callback, checkpoint_callback],
         max_epochs=args.n_epochs,
         accelerator="gpu" if args.gpu else "cpu",
+        # strategy='dp',
     )
     trainer.fit(model, data_module)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """BertClassifier
 
-The purpose of the module is to finetune a Bert Classifer with a Public Procurement dataset
+The purpose of the module is to finetune a Bert Classifier with a Public Procurement dataset
 Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
@@ -16,7 +16,8 @@ from torch.utils.data import DataLoader, Dataset
 from torchmetrics import AUROC, Accuracy, F1Score
 from transformers import (
     AdamW,
-    AutoModel,
+    # AutoModel,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
@@ -106,14 +107,14 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2
+            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=8
         )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=8)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=8)
 
 
 class ProcurementFlagsTagger(pl.LightningModule):
@@ -123,51 +124,37 @@ class ProcurementFlagsTagger(pl.LightningModule):
         label_column: str,
         n_training_steps=None,
         n_warmup_steps=None,
-        dropout_p = 0.1
     ):
 
         super().__init__()
         self.n_classes = n_classes
-        self.bert = AutoModel.from_pretrained(
-            BERT_MODEL_NAME, return_dict=True, output_hidden_states=True
+        self.bert_classifier = AutoModelForSequenceClassification.from_pretrained(
+            BERT_MODEL_NAME
         )
-        self.classifier = nn.Linear(4 * self.bert.config.hidden_size, n_classes)
-        # classifier has to be 4 * hidden_dim, because we concat 4 layers
         self.label_column = label_column
         self.n_training_steps = n_training_steps
-        self.dropout = nn.Dropout(dropout_p)
         self.n_warmup_steps = n_warmup_steps
-        self.criterion = nn.BCELoss()
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output = self.bert(input_ids, attention_mask=attention_mask)
-        # last 4 layers
-        pooled_output = torch.cat(
-            tuple([output.hidden_states[i] for i in [-4, -3, -2, -1]]), dim=-1
-        )
-        pooled_output = pooled_output[:, 0, :]
-        pooled_output = self.dropout(pooled_output)
-        print(pooled_output.size)
-        output = self.classifier(pooled_output)
-        output = torch.sigmoid(output)
-        loss = 0
-        if labels is not None:
-            loss = self.criterion(output, labels)
-        return loss, output
+        output = self.bert_classifier(input_ids = input_ids, attention_mask=attention_mask, labels = labels)
+        return output
 
     def training_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
-        loss, outputs = self(input_ids, attention_mask, labels)
+        output = self(input_ids, attention_mask, labels)
+        loss = output.loss
+        preds = torch.sigmoid(output.logits)
         self.log("train_loss", loss, prog_bar=True, logger=True)
-        return {"loss": loss, "predictions": outputs, "labels": labels}
+        return {"loss": loss, "predictions": preds, "labels": labels}
 
     def validation_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
-        loss, outputs = self(input_ids, attention_mask, labels)
+        output = self(input_ids, attention_mask, labels)
+        loss = output.loss
         self.log("val_loss", loss, prog_bar=True, logger=True)
         return loss
 
@@ -175,7 +162,8 @@ class ProcurementFlagsTagger(pl.LightningModule):
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
-        loss, outputs = self(input_ids, attention_mask, labels)
+        output = self(input_ids, attention_mask, labels)
+        loss = output.loss
         self.log("test_loss", loss, prog_bar=True, logger=True)
         return loss
 
