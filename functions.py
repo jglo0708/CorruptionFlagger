@@ -89,7 +89,7 @@ def read_and_split(args):
             val_df = val_df.append(val_df_tmp)
             test_df = test_df.append(test_df_tmp)
 
-        return train_df, val_df, test_df
+    return train_df, val_df, test_df
 
 
 def process_data(args, train_df, val_df, test_df, tokenizer):
