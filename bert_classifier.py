@@ -25,22 +25,20 @@ from transformers import (
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pytorch_lightning as pl
 
-MAX_TOKEN_COUNT = 256
 RANDOM_SEED = 42
 pl.seed_everything(RANDOM_SEED)
 
 BERT_MODEL_NAME = "distilbert-base-multilingual-cased"
-TOKENIZER = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
+
 
 
 class ProcurementNoticeDataset(Dataset):
     def __init__(
         self,
         df: pd.DataFrame,
-        tokenizer: AutoTokenizer,
         max_token_len: int = 256,
     ):
-        self.tokenizer = tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
         self.df = df
         self.max_token_len = max_token_len
 
@@ -77,7 +75,6 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         train_df,
         val_df,
         test_df,
-        tokenizer,
         batch_size=16,
         max_token_len=256,
     ):
@@ -89,32 +86,31 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.train_df = train_df
         self.val_df = val_df
         self.test_df = test_df
-        self.tokenizer = tokenizer
         self.max_token_len = max_token_len
 
     def setup(self, stage = None):
         self.train_dataset = ProcurementNoticeDataset(
-            self.train_df, self.tokenizer, self.max_token_len
+            self.train_df, self.max_token_len
         )
 
         self.val_dataset = ProcurementNoticeDataset(
-            self.val_df, self.tokenizer, self.max_token_len
+            self.val_df,  self.max_token_len
         )
 
         self.test_dataset = ProcurementNoticeDataset(
-            self.test_df, self.tokenizer, self.max_token_len
+            self.test_df,  self.max_token_len
         )
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=8
+            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4
         )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=8)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=8)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=4)
 
 
 class ProcurementFlagsTagger(pl.LightningModule):
@@ -145,8 +141,8 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = batch["labels"]
         output = self(input_ids, attention_mask, labels)
         loss = output.loss
-        preds = torch.sigmoid(output.logits)
-        self.log("train_loss", loss, prog_bar=True, logger=True)
+        preds = torch.sigmoid(torch.argmax(output.logits,0))
+        self.log("train_loss", loss, prog_bar=True, logger=True, sync_dist=True)
         return {"loss": loss, "predictions": preds, "labels": labels}
 
     def validation_step(self, batch, batch_idx):
@@ -155,7 +151,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = batch["labels"]
         output = self(input_ids, attention_mask, labels)
         loss = output.loss
-        self.log("val_loss", loss, prog_bar=True, logger=True)
+        self.log("val_loss", loss, prog_bar=True, logger=True,sync_dist=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -164,10 +160,14 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = batch["labels"]
         output = self(input_ids, attention_mask, labels)
         loss = output.loss
-        self.log("test_loss", loss, prog_bar=True, logger=True)
+        self.log("test_loss", loss, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
     def training_epoch_end(self, outputs):
+        if (self.current_epoch == 1):
+            sampleImg = torch.rand((1, 1, 28, 28))
+            self.logger.experiment.add_graph(ProcurementFlagsTagger(), sampleImg)
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
 
         labels = []
         predictions = []
@@ -179,13 +179,17 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
         labels = torch.stack(labels).int()
         predictions = torch.stack(predictions)
-
-        for i, name in enumerate(self.label_column):
-            auroc = AUROC(num_classes=self.n_classes)
-            class_roc_auc = auroc(predictions[:, i], labels[:, i])
-            self.logger.experiment.add_scalar(
-                f"{name}_roc_auc/Train", class_roc_auc, self.current_epoch
+        print(labels.size())
+        print(predictions.size())
+        auroc = AUROC(task='binary')
+        class_roc_auc = auroc(predictions, labels)
+        self.logger.experiment.add_scalar(
+            f"roc_auc/Train", class_roc_auc, self.current_epoch
             )
+        self.logger.experiment.add_scalar(
+            f"Loss/Train", avg_loss, self.current_epoch
+            )
+
 
     def configure_optimizers(self):
 
