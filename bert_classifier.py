@@ -198,8 +198,13 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.logger.experiment.add_scalar(f"F1/Train", f1_score, self.current_epoch)
 
     def validation_epoch_end(self, val_outputs):
-        print(val_outputs)
+
         avg_loss = torch.stack([x for x in val_outputs]).mean()
+        self.logger.experiment.add_scalar(f"Loss/Val", avg_loss, self.current_epoch)
+
+    def test_epoch_end(self, test_outputs):
+
+        avg_loss = torch.stack([x for x in test_outputs]).mean()
         self.logger.experiment.add_scalar(f"Loss/Val", avg_loss, self.current_epoch)
 
     def configure_optimizers(self):
