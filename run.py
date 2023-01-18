@@ -3,15 +3,10 @@ import logging
 
 from functions import read_and_split, process_data, run_model
 from utils import calc_steps
-from transformers import (
-    AutoTokenizer,
-)
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 RANDOM_SEED = 42
-
-BERT_MODEL_NAME = "distilbert-base-cased"
-
 
 
 def main(args):
@@ -63,20 +58,26 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n_epochs",
         type=int,
-        default=10,
+        default=5,
         help="Number of epochs to run  - change if needed",
     )
     parser.add_argument(
-        "--max_token_count",
-        type=int,
-        default=256,
-        help="Max number of tokens to use in Bert model",
+        "--bert_architecture",
+        type=str,
+        default="distilbert-base-multilingual-cased",
+        help="Underlying Bert model",
     )
     parser.add_argument(
-        "--gpu",
-        type=bool,
-        default=True,
-        help="Use gpu for training (strongly recommended)",
+        "--max_sequence_len",
+        type=int,
+        default=256,
+        help="Maximum sequence length of tokens to use in Bert model",
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=2e-5,
+        help="Learning rate for the optimiser",
     )
     args = parser.parse_args()
     main(args)

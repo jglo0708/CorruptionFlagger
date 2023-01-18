@@ -11,12 +11,10 @@ import os
 
 import pandas as pd
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from torchmetrics import AUROC, Accuracy, F1Score
 from transformers import (
     AdamW,
-    # AutoModel,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
@@ -28,17 +26,15 @@ import pytorch_lightning as pl
 RANDOM_SEED = 42
 pl.seed_everything(RANDOM_SEED)
 
-BERT_MODEL_NAME = "distilbert-base-multilingual-cased"
-
-
 
 class ProcurementNoticeDataset(Dataset):
     def __init__(
         self,
         df: pd.DataFrame,
+        bert_architecture: str = "distilbert-base-multilingual-cased",
         max_token_len: int = 256,
     ):
-        self.tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
+        self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
         self.df = df
         self.max_token_len = max_token_len
 
@@ -65,7 +61,7 @@ class ProcurementNoticeDataset(Dataset):
             notice_text=notice_text,
             input_ids=encoding["input_ids"].flatten(),
             attention_mask=encoding["attention_mask"].flatten(),
-            labels=labels
+            labels=labels,
         )
 
 
@@ -75,8 +71,9 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         train_df,
         val_df,
         test_df,
-        batch_size=16,
-        max_token_len=256,
+        batch_size: int = 16,
+        max_token_len: int = 256,
+        bert_architecture: str = "distilbert-base-multilingual-cased",
     ):
         super().__init__()
         self.test_dataset = None
@@ -86,19 +83,20 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.train_df = train_df
         self.val_df = val_df
         self.test_df = test_df
+        self.bert_architecture = bert_architecture
         self.max_token_len = max_token_len
 
-    def setup(self, stage = None):
+    def setup(self, stage=None):
         self.train_dataset = ProcurementNoticeDataset(
-            self.train_df, self.max_token_len
+            self.train_df, self.bert_architecture, self.max_token_len
         )
 
         self.val_dataset = ProcurementNoticeDataset(
-            self.val_df,  self.max_token_len
+            self.val_df, self.bert_architecture, self.max_token_len
         )
 
         self.test_dataset = ProcurementNoticeDataset(
-            self.test_df,  self.max_token_len
+            self.test_df, self.bert_architecture, self.max_token_len
         )
 
     def train_dataloader(self):
@@ -118,21 +116,28 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self,
         n_classes: int,
         label_column: str,
+        optimiser: str,
+        bert_architecture: str,
+        learning_rate: str,
         n_training_steps=None,
         n_warmup_steps=None,
     ):
 
         super().__init__()
         self.n_classes = n_classes
+        self.optimizer = optimiser
         self.bert_classifier = AutoModelForSequenceClassification.from_pretrained(
-            BERT_MODEL_NAME
+            bert_architecture
         )
         self.label_column = label_column
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
+        self.learning_rate = learning_rate
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output = self.bert_classifier(input_ids = input_ids, attention_mask=attention_mask, labels = labels)
+        output = self.bert_classifier(
+            input_ids=input_ids, attention_mask=attention_mask, labels=labels
+        )
         return output
 
     def training_step(self, batch, batch_idx):
@@ -141,7 +146,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = batch["labels"]
         output = self(input_ids, attention_mask, labels)
         loss = output.loss
-        preds = torch.sigmoid(torch.argmax(output.logits,0))
+        preds = torch.sigmoid(torch.argmax(output.logits, 0))
         self.log("train_loss", loss, prog_bar=True, logger=True, sync_dist=True)
         return {"loss": loss, "predictions": preds, "labels": labels}
 
@@ -151,7 +156,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = batch["labels"]
         output = self(input_ids, attention_mask, labels)
         loss = output.loss
-        self.log("val_loss", loss, prog_bar=True, logger=True,sync_dist=True)
+        self.log("val_loss", loss, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -164,10 +169,10 @@ class ProcurementFlagsTagger(pl.LightningModule):
         return loss
 
     def training_epoch_end(self, outputs):
-        if (self.current_epoch == 1):
+        if self.current_epoch == 1:
             sampleImg = torch.rand((1, 1, 28, 28))
             self.logger.experiment.add_graph(ProcurementFlagsTagger(), sampleImg)
-        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
 
         labels = []
         predictions = []
@@ -179,21 +184,27 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
         labels = torch.stack(labels).int()
         predictions = torch.stack(predictions)
-        print(labels.size())
-        print(predictions.size())
-        auroc = AUROC(task='binary')
-        class_roc_auc = auroc(predictions, labels)
-        self.logger.experiment.add_scalar(
-            f"roc_auc/Train", class_roc_auc, self.current_epoch
-            )
-        self.logger.experiment.add_scalar(
-            f"Loss/Train", avg_loss, self.current_epoch
-            )
 
+        auroc = AUROC(task="binary")
+        accuracy = Accuracy(task="binary")
+        f1 = F1Score(task="binary")
+
+        class_roc_auc = auroc(predictions, labels)
+        accuracy_score = accuracy(predictions, labels)
+        f1_score = f1(predictions, labels)
+
+        self.logger.experiment.add_scalar(
+            f"ROC/Train", class_roc_auc, self.current_epoch
+        )
+        self.logger.experiment.add_scalar(
+            f"Accuracy/Train", accuracy_score, self.current_epoch
+        )
+        self.logger.experiment.add_scalar(f"Loss/Train", avg_loss, self.current_epoch)
+        self.logger.experiment.add_scalar(f"Loss/Train", avg_loss, self.current_epoch)
 
     def configure_optimizers(self):
 
-        optimizer = AdamW(self.parameters(), lr=2e-5)
+        optimizer = AdamW(self.parameters(), lr=self.learning_rate)
 
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
