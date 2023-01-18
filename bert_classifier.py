@@ -23,9 +23,6 @@ from transformers import (
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pytorch_lightning as pl
 
-RANDOM_SEED = 42
-pl.seed_everything(RANDOM_SEED)
-
 
 class ProcurementNoticeDataset(Dataset):
     def __init__(
@@ -42,7 +39,7 @@ class ProcurementNoticeDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, index: int):
-        data_row = self.df.df.iloc[index]
+        data_row = self.df.iloc[index]
         notice_text = data_row.text
         labels = torch.tensor(int(data_row["label_encoded"])).long()
 
@@ -116,16 +113,15 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self,
         n_classes: int,
         label_column: str,
-        optimiser: str,
         bert_architecture: str,
-        learning_rate: str,
+        learning_rate: float,
         n_training_steps=None,
         n_warmup_steps=None,
     ):
 
         super().__init__()
         self.n_classes = n_classes
-        self.optimizer = optimiser
+        self.bert_architecture = bert_architecture
         self.bert_classifier = AutoModelForSequenceClassification.from_pretrained(
             bert_architecture
         )
@@ -146,7 +142,8 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = batch["labels"]
         output = self(input_ids, attention_mask, labels)
         loss = output.loss
-        preds = torch.sigmoid(torch.argmax(output.logits, 0))
+        preds = torch.sigmoid(torch.argmax(output.logits, 1))
+
         self.log("train_loss", loss, prog_bar=True, logger=True, sync_dist=True)
         return {"loss": loss, "predictions": preds, "labels": labels}
 
@@ -160,6 +157,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
+
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
@@ -169,9 +167,6 @@ class ProcurementFlagsTagger(pl.LightningModule):
         return loss
 
     def training_epoch_end(self, outputs):
-        if self.current_epoch == 1:
-            sampleImg = torch.rand((1, 1, 28, 28))
-            self.logger.experiment.add_graph(ProcurementFlagsTagger(), sampleImg)
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
 
         labels = []
@@ -200,7 +195,12 @@ class ProcurementFlagsTagger(pl.LightningModule):
             f"Accuracy/Train", accuracy_score, self.current_epoch
         )
         self.logger.experiment.add_scalar(f"Loss/Train", avg_loss, self.current_epoch)
-        self.logger.experiment.add_scalar(f"Loss/Train", avg_loss, self.current_epoch)
+        self.logger.experiment.add_scalar(f"F1/Train", f1_score, self.current_epoch)
+
+    def validation_epoch_end(self, val_outputs):
+        print(val_outputs)
+        avg_loss = torch.stack([x for x in val_outputs]).mean()
+        self.logger.experiment.add_scalar(f"Loss/Val", avg_loss, self.current_epoch)
 
     def configure_optimizers(self):
 

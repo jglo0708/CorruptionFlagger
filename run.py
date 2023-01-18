@@ -2,16 +2,19 @@ import argparse
 import logging
 
 from functions import read_and_split, process_data, run_model
-from utils import calc_steps
+from utils import calc_steps, seed_everything
 import warnings
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
-RANDOM_SEED = 42
 
 
 def main(args):
+    seed_everything()
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
+    logging.info("Train set size=%s", len(train_df))
+    logging.info("Val set size=%s", len(val_df))
+    logging.info("Test set size=%s", len(test_df))
     data_module = process_data(args, train_df, val_df, test_df)
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")

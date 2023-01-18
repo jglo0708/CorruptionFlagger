@@ -38,7 +38,6 @@ def read_and_split(args):
     test_df = pd.DataFrame()
     for f in os.listdir(args.data_path):
         file = os.path.join(args.data_path, f)
-        print(file)
         assert (
             pathlib.Path(file).resolve().is_file()
         ), f"{file} should be a file (not dir)"
@@ -101,22 +100,7 @@ def process_data(args, train_df, val_df, test_df):
     :param test_df:
     :return:
     """
-    # train_dataset = ProcurementNoticeDataset(
-    #     df=train_df,
-    #     bert_architecture=args.bert_architecture,
-    #     max_token_len=args.max_sequence_len,
-    # )
-    # val_dataset = ProcurementNoticeDataset(
-    #     df=val_df,
-    #     bert_architecture=args.bert_architecture,
-    #     max_token_len=args.max_sequence_len,
-    # )
-    #
-    # test_dataset = ProcurementNoticeDataset(
-    #     df=test_df,
-    #     bert_architecture=args.bert_architecture,
-    #     max_token_len=args.max_sequence_len,
-    # )
+
     data_module = ProcurementNoticeDataModule(
         train_df=train_df,
         val_df=val_df,
@@ -154,7 +138,7 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         mode="min",
     )
 
-    logger = TensorBoardLogger("lightning_logs", name="corruption_indicators")
+    logger = TensorBoardLogger("lightning_logs", name="corruption_indicators", log_graph=True)
     logger.log_hyperparams(
         {
             "epochs": args.n_epochs,
