@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """BertClassifier
 
-The purpose of the module is to finetune a Bert Classifer with a Public Procurement dataset
+The purpose of the module is to finetune a Bert Classifier with a Public Procurement dataset
 Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
@@ -11,12 +11,11 @@ import os
 
 import pandas as pd
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from torchmetrics import AUROC, Accuracy, F1Score
 from transformers import (
     AdamW,
-    AutoModel,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
 )
@@ -24,22 +23,15 @@ from transformers import (
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pytorch_lightning as pl
 
-MAX_TOKEN_COUNT = 256
-RANDOM_SEED = 42
-pl.seed_everything(RANDOM_SEED)
-
-BERT_MODEL_NAME = "distilbert-base-multilingual-cased"
-TOKENIZER = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
-
 
 class ProcurementNoticeDataset(Dataset):
     def __init__(
         self,
         df: pd.DataFrame,
-        tokenizer: AutoTokenizer,
+        bert_architecture: str = "distilbert-base-multilingual-cased",
         max_token_len: int = 256,
     ):
-        self.tokenizer = tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
         self.df = df
         self.max_token_len = max_token_len
 
@@ -47,7 +39,7 @@ class ProcurementNoticeDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, index: int):
-        data_row = self.df.df.iloc[index]
+        data_row = self.df.iloc[index]
         notice_text = data_row.text
         labels = torch.tensor(int(data_row["label_encoded"])).long()
 
@@ -66,7 +58,7 @@ class ProcurementNoticeDataset(Dataset):
             notice_text=notice_text,
             input_ids=encoding["input_ids"].flatten(),
             attention_mask=encoding["attention_mask"].flatten(),
-            labels=labels
+            labels=labels,
         )
 
 
@@ -76,9 +68,9 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         train_df,
         val_df,
         test_df,
-        tokenizer,
-        batch_size=16,
-        max_token_len=256,
+        batch_size: int = 16,
+        max_token_len: int = 256,
+        bert_architecture: str = "distilbert-base-multilingual-cased",
     ):
         super().__init__()
         self.test_dataset = None
@@ -88,32 +80,32 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.train_df = train_df
         self.val_df = val_df
         self.test_df = test_df
-        self.tokenizer = tokenizer
+        self.bert_architecture = bert_architecture
         self.max_token_len = max_token_len
 
-    def setup(self, stage = None):
+    def setup(self, stage=None):
         self.train_dataset = ProcurementNoticeDataset(
-            self.train_df, self.tokenizer, self.max_token_len
+            self.train_df, self.bert_architecture, self.max_token_len
         )
 
         self.val_dataset = ProcurementNoticeDataset(
-            self.val_df, self.tokenizer, self.max_token_len
+            self.val_df, self.bert_architecture, self.max_token_len
         )
 
         self.test_dataset = ProcurementNoticeDataset(
-            self.test_df, self.tokenizer, self.max_token_len
+            self.test_df, self.bert_architecture, self.max_token_len
         )
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2
+            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4
         )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=4)
 
 
 class ProcurementFlagsTagger(pl.LightningModule):
@@ -121,65 +113,61 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self,
         n_classes: int,
         label_column: str,
+        bert_architecture: str,
+        learning_rate: float,
         n_training_steps=None,
         n_warmup_steps=None,
-        dropout_p = 0.1
     ):
 
         super().__init__()
         self.n_classes = n_classes
-        self.bert = AutoModel.from_pretrained(
-            BERT_MODEL_NAME, return_dict=True, output_hidden_states=True
+        self.bert_architecture = bert_architecture
+        self.bert_classifier = AutoModelForSequenceClassification.from_pretrained(
+            bert_architecture
         )
-        self.classifier = nn.Linear(4 * self.bert.config.hidden_size, n_classes)
-        # classifier has to be 4 * hidden_dim, because we concat 4 layers
         self.label_column = label_column
         self.n_training_steps = n_training_steps
-        self.dropout = nn.Dropout(dropout_p)
         self.n_warmup_steps = n_warmup_steps
-        self.criterion = nn.BCELoss()
+        self.learning_rate = learning_rate
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output = self.bert(input_ids, attention_mask=attention_mask)
-        # last 4 layers
-        pooled_output = torch.cat(
-            tuple([output.hidden_states[i] for i in [-4, -3, -2, -1]]), dim=-1
+        output = self.bert_classifier(
+            input_ids=input_ids, attention_mask=attention_mask, labels=labels
         )
-        pooled_output = pooled_output[:, 0, :]
-        pooled_output = self.dropout(pooled_output)
-        print(pooled_output.size)
-        output = self.classifier(pooled_output)
-        output = torch.sigmoid(output)
-        loss = 0
-        if labels is not None:
-            loss = self.criterion(output, labels)
-        return loss, output
+        return output
 
     def training_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
-        loss, outputs = self(input_ids, attention_mask, labels)
-        self.log("train_loss", loss, prog_bar=True, logger=True)
-        return {"loss": loss, "predictions": outputs, "labels": labels}
+        output = self(input_ids, attention_mask, labels)
+        loss = output.loss
+        preds = torch.sigmoid(torch.argmax(output.logits, 1))
+
+        self.log("train_loss", loss, prog_bar=True, logger=True, sync_dist=True)
+        return {"loss": loss, "predictions": preds, "labels": labels}
 
     def validation_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
-        loss, outputs = self(input_ids, attention_mask, labels)
-        self.log("val_loss", loss, prog_bar=True, logger=True)
+        output = self(input_ids, attention_mask, labels)
+        loss = output.loss
+        self.log("val_loss", loss, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
     def test_step(self, batch, batch_idx):
+
         input_ids = batch["input_ids"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
-        loss, outputs = self(input_ids, attention_mask, labels)
-        self.log("test_loss", loss, prog_bar=True, logger=True)
+        output = self(input_ids, attention_mask, labels)
+        loss = output.loss
+        self.log("test_loss", loss, prog_bar=True, logger=True, sync_dist=True)
         return loss
 
     def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
 
         labels = []
         predictions = []
@@ -192,16 +180,36 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = torch.stack(labels).int()
         predictions = torch.stack(predictions)
 
-        for i, name in enumerate(self.label_column):
-            auroc = AUROC(num_classes=self.n_classes)
-            class_roc_auc = auroc(predictions[:, i], labels[:, i])
-            self.logger.experiment.add_scalar(
-                f"{name}_roc_auc/Train", class_roc_auc, self.current_epoch
-            )
+        auroc = AUROC(task="binary")
+        accuracy = Accuracy(task="binary")
+        f1 = F1Score(task="binary")
+
+        class_roc_auc = auroc(predictions, labels)
+        accuracy_score = accuracy(predictions, labels)
+        f1_score = f1(predictions, labels)
+
+        self.logger.experiment.add_scalar(
+            f"ROC/Train", class_roc_auc, self.current_epoch
+        )
+        self.logger.experiment.add_scalar(
+            f"Accuracy/Train", accuracy_score, self.current_epoch
+        )
+        self.logger.experiment.add_scalar(f"Loss/Train", avg_loss, self.current_epoch)
+        self.logger.experiment.add_scalar(f"F1/Train", f1_score, self.current_epoch)
+
+    def validation_epoch_end(self, val_outputs):
+
+        avg_loss = torch.stack([x for x in val_outputs]).mean()
+        self.logger.experiment.add_scalar(f"Loss/Val", avg_loss, self.current_epoch)
+
+    def test_epoch_end(self, test_outputs):
+
+        avg_loss = torch.stack([x for x in test_outputs]).mean()
+        self.logger.experiment.add_scalar(f"Loss/Val", avg_loss, self.current_epoch)
 
     def configure_optimizers(self):
 
-        optimizer = AdamW(self.parameters(), lr=2e-5)
+        optimizer = AdamW(self.parameters(), lr=self.learning_rate)
 
         scheduler = get_linear_schedule_with_warmup(
             optimizer,

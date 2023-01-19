@@ -38,7 +38,6 @@ def read_and_split(args):
     test_df = pd.DataFrame()
     for f in os.listdir(args.data_path):
         file = os.path.join(args.data_path, f)
-        print(file)
         assert (
             pathlib.Path(file).resolve().is_file()
         ), f"{file} should be a file (not dir)"
@@ -92,39 +91,23 @@ def read_and_split(args):
     return train_df, val_df, test_df
 
 
-def process_data(args, train_df, val_df, test_df, tokenizer):
-    '''
+def process_data(args, train_df, val_df, test_df):
+    """
     Creates a DataModule object
     :param args:
     :param train_df:
     :param val_df:
     :param test_df:
-    :param tokenizer:
     :return:
-    '''
-    train_dataset = ProcurementNoticeDataset(
-        df=train_df,
-        tokenizer=tokenizer,
-        max_token_len=args.max_token_count,
-    )
-    val_dataset = ProcurementNoticeDataset(
-        df=val_df,
-        tokenizer=tokenizer,
-        max_token_len=args.max_token_count,
-    )
+    """
 
-    test_dataset = ProcurementNoticeDataset(
-        df=test_df,
-        tokenizer=tokenizer,
-        max_token_len=args.max_token_count,
-    )
     data_module = ProcurementNoticeDataModule(
-        train_df=train_dataset,
-        val_df=val_dataset,
-        test_df=test_dataset,
-        tokenizer=tokenizer,
+        train_df=train_df,
+        val_df=val_df,
+        test_df=test_df,
         batch_size=args.batch_size,
-        max_token_len=args.max_token_count,
+        bert_architecture=args.bert_architecture,
+        max_token_len=args.max_sequence_len,
     )
     return data_module
 
@@ -142,6 +125,8 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         n_classes=2,
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
+        bert_architecture=args.bert_architecture,
+        learning_rate=args.learning_rate,
         label_column="label_encoded",
     )
     checkpoint_callback = ModelCheckpoint(
@@ -153,12 +138,20 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         mode="min",
     )
 
-    logger = TensorBoardLogger("lightning_logs", name="corruption_indicators")
+    logger = TensorBoardLogger("lightning_logs", name="corruption_indicators", log_graph=True)
+    logger.log_hyperparams(
+        {
+            "epochs": args.n_epochs,
+            "learning_rate": args.learning_rate,
+            "model": args.bert_architecture,
+        }
+    )
     early_stopping_callback = EarlyStopping(monitor="val_loss", patience=3)
     trainer = pl.Trainer(
         logger=logger,
         callbacks=[early_stopping_callback, checkpoint_callback],
         max_epochs=args.n_epochs,
-        accelerator="gpu" if args.gpu else "cpu",
+        accelerator="gpu",
+        # strategy='dp',
     )
     trainer.fit(model, data_module)
