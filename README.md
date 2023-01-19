@@ -22,11 +22,11 @@ positional arguments:
   * **text_column**:            Column with the text data (e.g. procurement description, etc.)
 
 optional arguments:
-  * **checkpoint_path**:
-                        path to save model checkpoints (default: 'checkpoints')
+  * **checkpoint_path**: path to save model checkpoints (default: 'checkpoints')
   * **batch_size**:  Batch size - change if needed (reduce for lower memory usage) (default: 8)
   * **n_epochs**:  Number of epochs to run - change if needed (default: 10)
-  * **max_token_count**: Max number of tokens to use in BERT model (default: 256)
-  * **gpu GPU**: Use gpu for training (strongly recommended) (default: True)
-
-
+  * **max_sequence_len**: Max number of tokens to use in BERT model (default: 256)
+  * **bert_architecture**: Underlying Bert model (default = 'distilbert-base-multilingual-cased")
+  * **learning_rate**: Learning rate for the optimiser (default = 2e-5)
+  * **resume_from_checkpoint**: In case you wish to continue training, input the relative path of the .cpt file (default = None)
+  * **save_transformers_model**: save Transformers model (default: True)

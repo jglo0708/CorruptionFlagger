@@ -112,7 +112,7 @@ def process_data(args, train_df, val_df, test_df):
     return data_module
 
 
-def run_model(args, warmup_steps, total_training_steps, data_module):
+def run_model(args, logger, warmup_steps, total_training_steps, data_module):
     """
 
     :param args: command-line arguments
@@ -121,6 +121,10 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
     :param data_module: Lightning Pytorch data module object
     :return: None
     """
+    # make directory to same checkpoints
+    dir_path = os.path.join(args.checkpoint_path, args.bert_architecture)
+    os.makedirs(dir_path, exist_ok=True)
+
     model = ProcurementFlagsTagger(
         n_classes=2,
         n_warmup_steps=warmup_steps,
@@ -130,15 +134,18 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         label_column="label_encoded",
     )
     checkpoint_callback = ModelCheckpoint(
-        dirpath=args.checkpoint_path,
-        filename="best-checkpoint",
+        dirpath=dir_path,
+        save_last=True,
         save_top_k=3,
         verbose=True,
+        filename="PL--{epoch}-{val_loss:.3f}-{train_loss:.3f}",
         monitor="val_loss",
         mode="min",
     )
 
-    logger = TensorBoardLogger("lightning_logs", name="corruption_indicators", log_graph=True)
+    logger = TensorBoardLogger(
+        "lightning_logs", name="corruption_indicators", log_graph=True
+    )
     logger.log_hyperparams(
         {
             "epochs": args.n_epochs,
@@ -147,11 +154,35 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         }
     )
     early_stopping_callback = EarlyStopping(monitor="val_loss", patience=3)
-    trainer = pl.Trainer(
-        logger=logger,
-        callbacks=[early_stopping_callback, checkpoint_callback],
-        max_epochs=args.n_epochs,
-        accelerator="gpu",
-        # strategy='dp',
-    )
+    if args.resume_from_checkpoint:
+        trainer = pl.Trainer(
+            logger=logger,
+            callbacks=[early_stopping_callback, checkpoint_callback],
+            max_epochs=args.n_epochs,
+            resume_from_checkpoint=args.resume_from_checkpoint,
+            accelerator="gpu",
+            # strategy='dp',
+        )
+    else:
+        trainer = pl.Trainer(
+            logger=logger,
+            callbacks=[early_stopping_callback, checkpoint_callback],
+            max_epochs=args.n_epochs,
+            accelerator="gpu",
+            # strategy='dp',
+        )
     trainer.fit(model, data_module)
+
+    if args.run_test:
+        # test on the dataset in-distribution
+        trainer.test(datamodule=data_module, ckpt_path="best")
+
+    if args.save_transformers_model:
+        #  Save the tokenizer and the backbone LM with HuggingFace's serialization.
+        #  To avoid mixing PL's and HuggingFace's serialization:
+        #  https://github.com/PyTorchLightning/pytorch-lightning/issues/3096#issuecomment-686877242
+        best_model = ProcurementFlagsTagger.load_from_checkpoint(
+            checkpoint_callback.best_model_path
+        )
+        best_model.get_backbone().save_pretrained(dir_path)
+        best_model.tokenizer.save_pretrained(dir_path)

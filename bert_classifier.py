@@ -122,6 +122,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         super().__init__()
         self.n_classes = n_classes
         self.bert_architecture = bert_architecture
+        self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
         self.bert_classifier = AutoModelForSequenceClassification.from_pretrained(
             bert_architecture
         )
@@ -129,6 +130,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
         self.learning_rate = learning_rate
+
+    def get_backbone(self):
+        return self.model
 
     def forward(self, input_ids, attention_mask, labels=None):
         output = self.bert_classifier(
