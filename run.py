@@ -8,7 +8,9 @@ import warnings
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
+
 def main(args, logger):
+
     seed_everything()
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
@@ -61,7 +63,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n_epochs",
         type=int,
-        default=10,
+        default=5,
         help="Number of epochs to run  - change if needed",
     )
     parser.add_argument(
@@ -81,6 +83,7 @@ if __name__ == "__main__":
         type=float,
         default=2e-5,
         help="Learning rate for the optimiser",
+
     )
     parser.add_argument(
         "--save_transformers_model",
@@ -99,6 +102,7 @@ if __name__ == "__main__":
         type=bool,
         default=None,
         help="In case you wish to run the model in test mode",
+
     )
     args = parser.parse_args()
     main(args, logger)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """BertClassifier
 
-The purpose of the module is to finetune a Bert Classifer with a Public Procurement dataset
+The purpose of the module is to finetune a Bert Classifier with a Public Procurement dataset
 Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
@@ -31,6 +31,7 @@ class ProcurementNoticeDataset(Dataset):
         self,
         df: pd.DataFrame,
         bert_architecture: str = "distilbert-base-multilingual-cased",
+
         max_sequence_len: int = 256,
     ):
         if is_local_files(bert_architecture):
@@ -39,6 +40,7 @@ class ProcurementNoticeDataset(Dataset):
             )
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
+
         self.df = df
         self.max_sequence_len = max_sequence_len
 
@@ -76,7 +78,9 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         val_df,
         test_df,
         batch_size: int = 16,
+
         max_sequence_len: int = 256,
+
         bert_architecture: str = "distilbert-base-multilingual-cased",
     ):
         super().__init__()
@@ -88,6 +92,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.val_df = val_df
         self.test_df = test_df
         self.bert_architecture = bert_architecture
+
         self.max_sequence_len = max_sequence_len
 
     def setup(self, stage=None):
@@ -130,6 +135,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.save_hyperparameters()
         self.n_classes = n_classes
         self.bert_architecture = bert_architecture
+
         if is_local_files(self.bert_architecture):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 bert_architecture, local_files_only=True
@@ -142,16 +148,20 @@ class ProcurementFlagsTagger(pl.LightningModule):
             self.model = AutoModelForSequenceClassification.from_pretrained(
                 bert_architecture
             )
+
+
         self.label_column = label_column
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
         self.learning_rate = learning_rate
+
 
     def get_backbone(self):
         return self.model
 
     def forward(self, input_ids, attention_mask, labels=None):
         output = self.model(
+
             input_ids=input_ids, attention_mask=attention_mask, labels=labels
         )
         return output
@@ -225,7 +235,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
     def test_epoch_end(self, test_outputs):
 
         avg_loss = torch.stack([x for x in test_outputs]).mean()
+
         self.logger.experiment.add_scalar(f"Loss/Test", avg_loss, self.current_epoch)
+
 
     def configure_optimizers(self):
 
