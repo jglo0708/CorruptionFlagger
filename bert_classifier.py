@@ -33,7 +33,12 @@ class ProcurementNoticeDataset(Dataset):
         bert_architecture: str = "distilbert-base-multilingual-cased",
         max_sequence_len: int = 256,
     ):
-        self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
+        if is_local_files(bert_architecture):
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                bert_architecture, local_files_only=True
+            )
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
         self.df = df
         self.max_sequence_len = max_sequence_len
 
@@ -127,15 +132,15 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.bert_architecture = bert_architecture
         if is_local_files(self.bert_architecture):
             self.tokenizer = AutoTokenizer.from_pretrained(
-                self.bert_architecture, local_files_only=True
+                bert_architecture, local_files_only=True
             )
             self.model = AutoModelForSequenceClassification.from_pretrained(
-                self.bert_architecture, local_files_only=True
+                bert_architecture, local_files_only=True
             )
         else:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.bert_architecture)
+            self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
             self.model = AutoModelForSequenceClassification.from_pretrained(
-                self.bert_architecture
+                bert_architecture
             )
         self.label_column = label_column
         self.n_training_steps = n_training_steps
