@@ -17,9 +17,10 @@ import json
 import os
 
 from bert_classifier import (
-    ProcurementNoticeDataset,
     ProcurementNoticeDataModule,
+    ProcurementNoticeDataModuleMulti,
     ProcurementFlagsTagger,
+    ProcurementFlagsTaggerMulti,
 )
 from utils import is_csv
 
@@ -100,19 +101,30 @@ def process_data(args, train_df, val_df, test_df):
     :param test_df:
     :return:
     """
-
-    data_module = ProcurementNoticeDataModule(
-        train_df=train_df,
-        val_df=val_df,
-        test_df=test_df,
-        batch_size=args.batch_size,
-        bert_architecture=args.bert_architecture,
-        max_token_len=args.max_sequence_len,
-    )
+    if not args.multilabel:
+        data_module = ProcurementNoticeDataModule(
+            train_df=train_df,
+            val_df=val_df,
+            test_df=test_df,
+            batch_size=args.batch_size,
+            bert_architecture=args.bert_architecture,
+            max_token_len=args.max_sequence_len,
+        )
+    else:
+        data_module = ProcurementNoticeDataModuleMulti(
+            train_df=train_df,
+            val_df=val_df,
+            test_df=test_df,
+            batch_size=args.batch_size,
+            bert_architecture=args.bert_architecture,
+            max_token_len=args.max_sequence_len,
+            categorical_columns=args.categorical_columns,
+            numerical_columns=args.numerical_columns,
+            combine_num_cat=args.combine_num_cat,
+        )
     return data_module
 
-
-def run_model(args, logger, warmup_steps, total_training_steps, data_module):
+def run_model(args, warmup_steps, total_training_steps, data_module):
     """
 
     :param args: command-line arguments
@@ -122,17 +134,27 @@ def run_model(args, logger, warmup_steps, total_training_steps, data_module):
     :return: None
     """
     # make directory to same checkpoints
-    dir_path = os.path.join(args.checkpoint_path, args.bert_architecture)
+    dir_path = os.path.join(args.checkpoint_path, str(args.bert_architecture).split('-')[0])
     os.makedirs(dir_path, exist_ok=True)
+    if not args.multilabel:
+        model = ProcurementFlagsTagger(
+            n_classes=2,
+            n_warmup_steps=warmup_steps,
+            n_training_steps=total_training_steps,
+            bert_architecture=args.bert_architecture,
+            learning_rate=args.learning_rate,
+            label_column="label_encoded",
+        )
+    else:
+        model = ProcurementFlagsTaggerMulti(
+            n_classes=len(args.label_columns),
+            n_warmup_steps=warmup_steps,
+            n_training_steps=total_training_steps,
+            bert_architecture=args.bert_architecture,
+            learning_rate=args.learning_rate,
+            label_columns=args.label_columns,
+        )
 
-    model = ProcurementFlagsTagger(
-        n_classes=2,
-        n_warmup_steps=warmup_steps,
-        n_training_steps=total_training_steps,
-        bert_architecture=args.bert_architecture,
-        learning_rate=args.learning_rate,
-        label_column="label_encoded",
-    )
     checkpoint_callback = ModelCheckpoint(
         dirpath=dir_path,
         save_last=True,

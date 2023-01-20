@@ -83,6 +83,26 @@ if __name__ == "__main__":
         help="Learning rate for the optimiser",
     )
     parser.add_argument(
+        "--multilabel",
+        type=bool,
+        default=False,
+        help="If yes, use multilabel classification (otherwise Binary) (default=False)",
+    )
+    parser.add_argument(
+        "--categorical_columns",
+        type=str,
+        default=None,
+        nargs='+',
+        help="Learning rate for the optimiser",
+    )
+    parser.add_argument(
+        "--numerical_columns",
+        type=str,
+        default=None,
+        nargs = '+',
+        help="Learning rate for the optimiser",
+    )
+    parser.add_argument(
         "--save_transformers_model",
         type=bool,
         default=True,
