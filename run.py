@@ -54,7 +54,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--batch_size",
-        default=16,
+        default=32,
         type=int,
         help="Batch size - change if needed (reduce for lower memory usage)",
     )

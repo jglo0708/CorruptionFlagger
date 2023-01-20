@@ -23,8 +23,8 @@ positional arguments:
 
 optional arguments:
   * **checkpoint_path**: path to save model checkpoints (default: 'checkpoints')
-  * **batch_size**:  Batch size - change if needed (reduce for lower memory usage) (default: 8)
-  * **n_epochs**:  Number of epochs to run - change if needed (default: 5)
+  * **batch_size**:  Batch size - change if needed (reduce for lower memory usage) (default: 32)
+  * **n_epochs**:  Number of epochs to run - change if needed (default: 10)
   * **max_sequence_len**: Max number of tokens to use in BERT model (default: 256)
   * **bert_architecture**: Underlying Bert model (default: "distilbert-base-multilingual-cased")
   * **learning_rate**: Learning rate for the optimiser (default: 2e-5)
