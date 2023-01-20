@@ -114,5 +114,11 @@ if __name__ == "__main__":
         default=None,
         help="In case you wish to continue training, input the relative path of the .cpt file",
     )
+    parser.add_argument(
+        "--run_test",
+        type=bool,
+        default=None,
+        help="In case you wish to run the model in test mode",
+    )
     args = parser.parse_args()
     main(args, logger)

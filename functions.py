@@ -175,8 +175,8 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
             "model": args.bert_architecture,
         }
     )
-    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=3)
-    if args.resume_from_checkpoint:
+    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=2)
+    if args.resume_from_checkpoint is not None:
         trainer = pl.Trainer(
             logger=logger,
             callbacks=[early_stopping_callback, checkpoint_callback],
