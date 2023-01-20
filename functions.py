@@ -178,11 +178,13 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         trainer.test(datamodule=data_module, ckpt_path="best")
 
     if args.save_transformers_model:
+        transformers_path = os.path.join(dir_path, "HF_saved")
+        os.makedirs(transformers_path, exist_ok=True)
         #  Save the tokenizer and the backbone LM with HuggingFace's serialization.
         #  To avoid mixing PL's and HuggingFace's serialization:
         #  https://github.com/PyTorchLightning/pytorch-lightning/issues/3096#issuecomment-686877242
         best_model = ProcurementFlagsTagger.load_from_checkpoint(
             checkpoint_callback.best_model_path
         )
-        best_model.get_backbone().save_pretrained(dir_path)
-        best_model.tokenizer.save_pretrained(dir_path)
+        best_model.get_backbone().save_pretrained(transformers_path)
+        best_model.tokenizer.save_pretrained(transformers_path)

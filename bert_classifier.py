@@ -120,6 +120,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
     ):
 
         super().__init__()
+        self.save_hyperparameters()
         self.n_classes = n_classes
         self.bert_architecture = bert_architecture
         self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
