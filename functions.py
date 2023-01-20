@@ -17,7 +17,6 @@ import json
 import os
 
 from bert_classifier import (
-    ProcurementNoticeDataset,
     ProcurementNoticeDataModule,
     ProcurementFlagsTagger,
 )

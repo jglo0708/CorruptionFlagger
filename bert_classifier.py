@@ -20,6 +20,8 @@ from transformers import (
     get_linear_schedule_with_warmup,
 )
 
+from utils import is_local_files
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pytorch_lightning as pl
 
@@ -123,10 +125,18 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.save_hyperparameters()
         self.n_classes = n_classes
         self.bert_architecture = bert_architecture
-        self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            bert_architecture
-        )
+        if is_local_files(self.bert_architecture):
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.bert_architecture, local_files_only=True
+            )
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.bert_architecture, local_files_only=True
+            )
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.bert_architecture)
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.bert_architecture
+            )
         self.label_column = label_column
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
