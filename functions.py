@@ -20,7 +20,7 @@ from bert_classifier import (
     ProcurementNoticeDataModule,
     ProcurementFlagsTagger,
 )
-from utils import is_csv
+from utils import is_csv, is_local_files
 
 TEST_SIZE = 0.1
 
@@ -120,9 +120,12 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
     :param data_module: Lightning Pytorch data module object
     :return: None
     """
-    dir_path = os.path.join(
-        args.checkpoint_path, str(args.bert_architecture).split("-")[0]
-    )
+    if is_local_files(args.bert_architecture):
+        dir_path = os.path.join(args.checkpoint_path, "custom_fine_tuned")
+    else:
+        dir_path = os.path.join(
+            args.checkpoint_path, str(args.bert_architecture).split("-")[0]
+        )
     os.makedirs(dir_path, exist_ok=True)
     model = ProcurementFlagsTagger(
         n_classes=2,
