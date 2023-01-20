@@ -17,14 +17,12 @@ import json
 import os
 
 from bert_classifier import (
-    ProcurementNoticeDataset,
     ProcurementNoticeDataModule,
     ProcurementFlagsTagger,
 )
-from utils import is_csv
+from utils import is_csv, is_local_files
 
 TEST_SIZE = 0.1
-RANDOM_SEED = 42
 
 
 def read_and_split(args):
@@ -101,13 +99,15 @@ def process_data(args, train_df, val_df, test_df):
     :return:
     """
 
+
     data_module = ProcurementNoticeDataModule(
         train_df=train_df,
         val_df=val_df,
         test_df=test_df,
-        batch_size=args.batch_size,
         bert_architecture=args.bert_architecture,
-        max_token_len=args.max_sequence_len,
+        batch_size=args.batch_size,
+        max_sequence_len=args.max_sequence_len,
+
     )
     return data_module
 
@@ -121,6 +121,13 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
     :param data_module: Lightning Pytorch data module object
     :return: None
     """
+    if is_local_files(args.bert_architecture):
+        dir_path = os.path.join(args.checkpoint_path, "custom_fine_tuned")
+    else:
+        dir_path = os.path.join(
+            args.checkpoint_path, str(args.bert_architecture).split("-")[0]
+        )
+    os.makedirs(dir_path, exist_ok=True)
     model = ProcurementFlagsTagger(
         n_classes=2,
         n_warmup_steps=warmup_steps,
@@ -130,15 +137,19 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
         label_column="label_encoded",
     )
     checkpoint_callback = ModelCheckpoint(
-        dirpath=args.checkpoint_path,
-        filename="best-checkpoint",
-        save_top_k=3,
+        dirpath=dir_path,
+        save_last=True,
+        save_top_k=1,
         verbose=True,
+        filename="PL--{epoch}-{val_loss:.3f}-{train_loss:.3f}",
         monitor="val_loss",
         mode="min",
     )
 
-    logger = TensorBoardLogger("lightning_logs", name="corruption_indicators", log_graph=True)
+    logger = TensorBoardLogger(
+        "lightning_logs", name="corruption_indicators", log_graph=True
+
+    )
     logger.log_hyperparams(
         {
             "epochs": args.n_epochs,
@@ -146,12 +157,38 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
             "model": args.bert_architecture,
         }
     )
-    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=3)
-    trainer = pl.Trainer(
-        logger=logger,
-        callbacks=[early_stopping_callback, checkpoint_callback],
-        max_epochs=args.n_epochs,
-        accelerator="gpu",
-        # strategy='dp',
-    )
+    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=2)
+    if args.resume_from_checkpoint is not None:
+        trainer = pl.Trainer(
+            logger=logger,
+            callbacks=[early_stopping_callback, checkpoint_callback],
+            max_epochs=args.n_epochs,
+            resume_from_checkpoint=args.resume_from_checkpoint,
+            accelerator="gpu",
+            # strategy='dp',
+        )
+    else:
+        trainer = pl.Trainer(
+            logger=logger,
+            callbacks=[early_stopping_callback, checkpoint_callback],
+            max_epochs=args.n_epochs,
+            accelerator="gpu",
+            # strategy='dp',
+        )
     trainer.fit(model, data_module)
+
+    if args.run_test:
+        # test on the dataset in-distribution
+        trainer.test(datamodule=data_module, ckpt_path="best")
+
+    if args.save_transformers_model:
+        transformers_path = os.path.join(dir_path, "HF_saved")
+        os.makedirs(transformers_path, exist_ok=True)
+        #  Save the tokenizer and the backbone LM with HuggingFace's serialization.
+        #  To avoid mixing PL's and HuggingFace's serialization:
+        #  https://github.com/PyTorchLightning/pytorch-lightning/issues/3096#issuecomment-686877242
+        best_model = ProcurementFlagsTagger.load_from_checkpoint(
+            checkpoint_callback.best_model_path
+        )
+        best_model.get_backbone().save_pretrained(transformers_path)
+        best_model.tokenizer.save_pretrained(transformers_path)

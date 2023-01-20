@@ -8,7 +8,9 @@ import warnings
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
-def main(args):
+
+def main(args, logger):
+
     seed_everything()
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
@@ -54,7 +56,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--batch_size",
-        default=8,
+        default=32,
         type=int,
         help="Batch size - change if needed (reduce for lower memory usage)",
     )
@@ -81,6 +83,26 @@ if __name__ == "__main__":
         type=float,
         default=2e-5,
         help="Learning rate for the optimiser",
+
+    )
+    parser.add_argument(
+        "--save_transformers_model",
+        type=bool,
+        default=True,
+        help="save Transformers model",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        type=str,
+        default=None,
+        help="In case you wish to continue training, input the relative path of the .cpt file",
+    )
+    parser.add_argument(
+        "--run_test",
+        type=bool,
+        default=None,
+        help="In case you wish to run the model in test mode",
+
     )
     args = parser.parse_args()
-    main(args)
+    main(args, logger)
