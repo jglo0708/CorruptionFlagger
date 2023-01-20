@@ -1,5 +1,10 @@
 import csv
+import os
+import random
 import string
+
+import numpy as np
+import torch
 
 
 def calc_steps(df, args):
@@ -16,7 +21,7 @@ def get_label_colums(df, args):
 
 def is_csv(infile):
     try:
-        with open(infile, newline='') as csvfile:
+        with open(infile, newline="") as csvfile:
             start = csvfile.read(4096)
 
             # isprintable does not allow newlines, printable does not allow umlauts...
@@ -27,3 +32,14 @@ def is_csv(infile):
     except csv.Error:
         # Could not get a csv dialect -> probably not a csv.
         return False
+
+
+def seed_everything(seed=42):
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
