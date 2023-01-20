@@ -54,14 +54,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--batch_size",
-        default=8,
+        default=16,
         type=int,
         help="Batch size - change if needed (reduce for lower memory usage)",
     )
     parser.add_argument(
         "--n_epochs",
         type=int,
-        default=5,
+        default=10,
         help="Number of epochs to run  - change if needed",
     )
     parser.add_argument(
