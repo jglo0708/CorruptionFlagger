@@ -11,7 +11,6 @@ import os
 
 import pandas as pd
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from torchmetrics import AUROC, Accuracy, F1Score
 from transformers import (
@@ -30,11 +29,11 @@ class ProcurementNoticeDataset(Dataset):
         self,
         df: pd.DataFrame,
         bert_architecture: str = "distilbert-base-multilingual-cased",
-        max_token_len: int = 256,
+        max_sequence_len: int = 256,
     ):
         self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
         self.df = df
-        self.max_token_len = max_token_len
+        self.max_sequence_len = max_sequence_len
 
     def __len__(self):
         return len(self.df)
@@ -47,7 +46,7 @@ class ProcurementNoticeDataset(Dataset):
         encoding = self.tokenizer.encode_plus(
             notice_text,
             add_special_tokens=True,
-            max_length=self.max_token_len,
+            max_length=self.max_sequence_len,
             return_token_type_ids=False,
             padding="max_length",
             truncation=True,
@@ -70,7 +69,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         val_df,
         test_df,
         batch_size: int = 16,
-        max_token_len: int = 256,
+        max_sequence_len: int = 256,
         bert_architecture: str = "distilbert-base-multilingual-cased",
     ):
         super().__init__()
@@ -82,31 +81,31 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.val_df = val_df
         self.test_df = test_df
         self.bert_architecture = bert_architecture
-        self.max_token_len = max_token_len
+        self.max_sequence_len = max_sequence_len
 
     def setup(self, stage=None):
         self.train_dataset = ProcurementNoticeDataset(
-            self.train_df, self.bert_architecture, self.max_token_len
+            self.train_df, self.bert_architecture, self.max_sequence_len
         )
 
         self.val_dataset = ProcurementNoticeDataset(
-            self.val_df, self.bert_architecture, self.max_token_len
+            self.val_df, self.bert_architecture, self.max_sequence_len
         )
 
         self.test_dataset = ProcurementNoticeDataset(
-            self.test_df, self.bert_architecture, self.max_token_len
+            self.test_df, self.bert_architecture, self.max_sequence_len
         )
 
     def train_dataloader(self):
         return DataLoader(
-            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=2
+            self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4
         )
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=2)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=4)
 
 
 class ProcurementFlagsTagger(pl.LightningModule):
@@ -136,7 +135,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         return self.model
 
     def forward(self, input_ids, attention_mask, labels=None):
-        output = self.bert_classifier(
+        output = self.model(
             input_ids=input_ids, attention_mask=attention_mask, labels=labels
         )
         return output

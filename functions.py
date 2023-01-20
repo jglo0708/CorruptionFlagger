@@ -91,7 +91,7 @@ def read_and_split(args):
     return train_df, val_df, test_df
 
 
-def process_data(args, train_df, val_df, test_df, tokenizer):
+def process_data(args, train_df, val_df, test_df):
     """
     Creates a DataModule object
     :param args:
@@ -101,29 +101,13 @@ def process_data(args, train_df, val_df, test_df, tokenizer):
     :param tokenizer:
     :return:
     """
-    train_dataset = ProcurementNoticeDataset(
-        df=train_df,
-        tokenizer=tokenizer,
-        max_token_len=args.max_token_count,
-    )
-    val_dataset = ProcurementNoticeDataset(
-        df=val_df,
-        tokenizer=tokenizer,
-        max_token_len=args.max_token_count,
-    )
-
-    test_dataset = ProcurementNoticeDataset(
-        df=test_df,
-        tokenizer=tokenizer,
-        max_token_len=args.max_token_count,
-    )
     data_module = ProcurementNoticeDataModule(
-        train_df=train_dataset,
-        val_df=val_dataset,
-        test_df=test_dataset,
-        tokenizer=tokenizer,
+        train_df=train_df,
+        val_df=val_df,
+        test_df=test_df,
+        bert_architecture=args.bert_architecture,
         batch_size=args.batch_size,
-        max_token_len=args.max_token_count,
+        max_sequence_len=args.max_sequence_len,
     )
     return data_module
 

@@ -15,7 +15,7 @@ def main(args, logger):
     logging.info("Train set size=%s", len(train_df))
     logging.info("Val set size=%s", len(val_df))
     logging.info("Test set size=%s", len(test_df))
-    data_module = process_data(args, logger, train_df, val_df, test_df)
+    data_module = process_data(args, train_df, val_df, test_df)
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
     run_model(args, total_training_steps, warmup_steps, data_module)
