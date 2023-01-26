@@ -18,9 +18,7 @@ import os
 
 from bert_classifier import (
     ProcurementNoticeDataModule,
-    ProcurementNoticeDataModuleMulti,
     ProcurementFlagsTagger,
-    ProcurementFlagsTaggerMulti,
 )
 from utils import is_csv
 
@@ -42,7 +40,41 @@ def read_and_split(args):
         assert (
             pathlib.Path(file).resolve().is_file()
         ), f"{file} should be a file (not dir)"
-        if not args.data_is_json:
+        if args.data_is_json:
+            with open(file) as json_file:
+                json_data = json.load(json_file)
+
+            train_df_tmp = pd.DataFrame.from_dict(json_data["train"], orient="index")
+            val_df_tmp = pd.DataFrame.from_dict(json_data["val"], orient="index")
+            test_df_tmp = pd.DataFrame.from_dict(json_data["test"], orient="index")
+
+            # train_df_tmp.rename(
+            #     columns={args.label_columns: "label_encoded", args.text_columns: "text"},
+            #     inplace=True,
+            # )
+            # val_df_tmp.rename(
+            #     columns={args.label_columns: "label_encoded", args.text_columns: "text"},
+            #     inplace=True,
+            # )
+            # test_df_tmp.rename(
+            #     columns={args.label_columns: "label_encoded", args.text_columns: "text"},
+            #     inplace=True,
+            # )
+            train_df = train_df.append(train_df_tmp)
+            val_df = val_df.append(val_df_tmp)
+            test_df = test_df.append(test_df_tmp)
+
+        elif args.data_is_pkl:
+            file_path = file.split('.')[-1]
+            if file_path.split('_')[-1] == 'train':
+                train_df = pd.read_pickled(file)
+            elif file_path.split('_')[-1] == 'val':
+                val_df = pd.read_pickled(file)
+            elif file_path.split('_')[-1] == 'test':
+                test_df = pd.read_pickled(file)
+
+
+        else:
             assert is_csv(file), f"{file} should be a CSV file"
             df = pd.read_csv(file, sep=None)
             assert set(df.columns).issuperset(
@@ -65,29 +97,8 @@ def read_and_split(args):
             train_df_tmp.append(train_df_tmp)
             val_df.append(val_df_tmp)
             test_df.append(test_df_tmp)
-        else:
-            with open(file) as json_file:
-                json_data = json.load(json_file)
 
-            train_df_tmp = pd.DataFrame.from_dict(json_data["train"], orient="index")
-            val_df_tmp = pd.DataFrame.from_dict(json_data["val"], orient="index")
-            test_df_tmp = pd.DataFrame.from_dict(json_data["test"], orient="index")
 
-            train_df_tmp.rename(
-                columns={args.label_column: "label_encoded", args.text_column: "text"},
-                inplace=True,
-            )
-            val_df_tmp.rename(
-                columns={args.label_column: "label_encoded", args.text_column: "text"},
-                inplace=True,
-            )
-            test_df_tmp.rename(
-                columns={args.label_column: "label_encoded", args.text_column: "text"},
-                inplace=True,
-            )
-            train_df = train_df.append(train_df_tmp)
-            val_df = val_df.append(val_df_tmp)
-            test_df = test_df.append(test_df_tmp)
 
     return train_df, val_df, test_df
 
@@ -101,27 +112,21 @@ def process_data(args, train_df, val_df, test_df):
     :param test_df:
     :return:
     """
-    if not args.multilabel:
-        data_module = ProcurementNoticeDataModule(
-            train_df=train_df,
-            val_df=val_df,
-            test_df=test_df,
-            batch_size=args.batch_size,
-            bert_architecture=args.bert_architecture,
-            max_token_len=args.max_sequence_len,
-        )
-    else:
-        data_module = ProcurementNoticeDataModuleMulti(
-            train_df=train_df,
-            val_df=val_df,
-            test_df=test_df,
-            batch_size=args.batch_size,
-            bert_architecture=args.bert_architecture,
-            max_token_len=args.max_sequence_len,
-            categorical_columns=args.categorical_columns,
-            numerical_columns=args.numerical_columns,
-            combine_num_cat=args.combine_num_cat,
-        )
+
+    data_module = ProcurementNoticeDataModule(
+        train_df=train_df,
+        val_df=val_df,
+        test_df=test_df,
+        batch_size=args.batch_size,
+        bert_architecture=args.bert_architecture,
+        max_token_len=args.max_sequence_len,
+        text_columns=args.text_columns,
+        numerical_columns=args.numerical_columns,
+        categorical_columns=args.categorical_columns,
+        label_columns=args.label_columns,
+        num_cat_to_text=args.num_cat_to_text,
+    )
+
     return data_module
 
 def run_model(args, warmup_steps, total_training_steps, data_module):
@@ -136,23 +141,14 @@ def run_model(args, warmup_steps, total_training_steps, data_module):
     # make directory to same checkpoints
     dir_path = os.path.join(args.checkpoint_path, str(args.bert_architecture).split('-')[0])
     os.makedirs(dir_path, exist_ok=True)
-    if not args.multilabel:
-        model = ProcurementFlagsTagger(
-            n_classes=2,
-            n_warmup_steps=warmup_steps,
-            n_training_steps=total_training_steps,
-            bert_architecture=args.bert_architecture,
-            learning_rate=args.learning_rate,
-            label_column="label_encoded",
-        )
-    else:
-        model = ProcurementFlagsTaggerMulti(
-            n_classes=len(args.label_columns),
+    model = ProcurementFlagsTagger(
             n_warmup_steps=warmup_steps,
             n_training_steps=total_training_steps,
             bert_architecture=args.bert_architecture,
             learning_rate=args.learning_rate,
             label_columns=args.label_columns,
+            combine_last_layer=args.combine_last_layer,
+            non_text_cols= args.numerical_columns + args.categorical_columns
         )
 
     checkpoint_callback = ModelCheckpoint(

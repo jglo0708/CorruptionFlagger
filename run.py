@@ -8,17 +8,17 @@ import warnings
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
-def main(args, logger):
+def main(args):
     seed_everything()
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
     logging.info("Train set size=%s", len(train_df))
     logging.info("Val set size=%s", len(val_df))
     logging.info("Test set size=%s", len(test_df))
-    data_module = process_data(args, logger, train_df, val_df, test_df)
+    data_module = process_data(args, train_df, val_df, test_df)
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
-    run_model(args, logger, total_training_steps, warmup_steps, data_module)
+    run_model(args, total_training_steps, warmup_steps, data_module)
     logger.info("Fine-tuning complete!")
 
 
@@ -36,13 +36,14 @@ if __name__ == "__main__":
     )
     parser.add_argument("data_path", type=str, help="path to the dataset dir")
     parser.add_argument("data_is_json", type=bool, help="is dataset in json format")
+    # parser.add_argument("data_is_pkl", type=bool, help="is dataset in pkl format")
     parser.add_argument(
-        "label_column",
+        "label_columns",
         type=str,
         help="Column with the data label (e.g. fraud/no fraud)",
     )
     parser.add_argument(
-        "text_column",
+        "text_columns",
         type=str,
         help="Column with the text data (e.g. procurement description, etc.)",
     )
@@ -83,24 +84,30 @@ if __name__ == "__main__":
         help="Learning rate for the optimiser",
     )
     parser.add_argument(
-        "--multilabel",
-        type=bool,
-        default=False,
-        help="If yes, use multilabel classification (otherwise Binary) (default=False)",
-    )
-    parser.add_argument(
         "--categorical_columns",
-        type=str,
-        default=None,
-        nargs='+',
+        type=list,
+        default=[],
+        nargs="+",
         help="Learning rate for the optimiser",
     )
     parser.add_argument(
         "--numerical_columns",
-        type=str,
-        default=None,
-        nargs = '+',
+        type=list,
+        default=[],
+        nargs="+",
         help="Learning rate for the optimiser",
+    )
+    parser.add_argument(
+        "--num_cat_to_text",
+        type=bool,
+        default=False,
+        help="Whether we combine the numerical and categorical&numerical features with text ",
+    )
+    parser.add_argument(
+        "--combine_last_layer",
+        type=bool,
+        default=False,
+        help="Whether we combine the numerical and categorical&numerical features with BERT embedding ",
     )
     parser.add_argument(
         "--save_transformers_model",
@@ -121,4 +128,4 @@ if __name__ == "__main__":
         help="In case you wish to run the model in test mode",
     )
     args = parser.parse_args()
-    main(args, logger)
+    main(args)

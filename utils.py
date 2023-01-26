@@ -1,5 +1,10 @@
 import csv
+import os
+import random
 import string
+
+import numpy as np
+import torch
 
 
 def calc_steps(df, args):
@@ -37,3 +42,10 @@ def seed_everything(seed=42):
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def is_local_files(path):
+    if len(path.split("/")) > 1:
+        return True
+    else:
+        return False
