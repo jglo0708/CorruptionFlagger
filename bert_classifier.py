@@ -228,7 +228,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         if self.bert_architecture == 'distilbert-base-multilingual-cased':
             self.pre_classifier = self.bert_classifier_auto.pre_classifier
         else:
-            self.pre_classifier = self.bert_classifier_auto.bert.pooler.Linear
+            self.pre_classifier = self.bert_classifier_auto.bert.pooler.dense
         if self.combine_last_layer:
             self.bert_classifier_auto.classifier.in_features = (
                 self.bert.config.hidden_size + len(non_text_cols)
