@@ -88,7 +88,16 @@ def read_and_split(args):
     return train_df, val_df, test_df
 
 
-def process_data(args, train_df, val_df, test_df, label_columns, text_columns, numerical_columns, categorical_columns):
+def process_data(
+    args,
+    train_df,
+    val_df,
+    test_df,
+    label_columns,
+    text_columns,
+    numerical_columns,
+    categorical_columns,
+):
     """
     Creates a DataModule object
     :param args:
@@ -142,7 +151,7 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
     checkpoint_callback = ModelCheckpoint(
         dirpath=dir_path,
         save_last=True,
-        save_top_k=3,
+        save_top_k=1,
         verbose=True,
         filename="PL--{epoch}-{val_loss:.3f}-{train_loss:.3f}",
         monitor="val_loss",
