@@ -54,11 +54,11 @@ def read_and_split(args):
 
         elif args.data_is_pkl:
             file_path = file.split(".")[-1]
-            if file_path.split("_")[-1] == "train":
+            if file_path.split("_")[0] == "train":
                 train_df = pd.read_pickled(file)
-            elif file_path.split("_")[-1] == "val":
+            elif file_path.split("_")[0] == "val":
                 val_df = pd.read_pickled(file)
-            elif file_path.split("_")[-1] == "test":
+            elif file_path.split("_")[0] == "test":
                 test_df = pd.read_pickled(file)
 
         else:

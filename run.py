@@ -38,8 +38,8 @@ if __name__ == "__main__":
         prog="BertClassifer", description="Finetune using a dataset"
     )
     parser.add_argument("data_path", type=str, help="path to the dataset dir")
-    parser.add_argument("data_is_json", type=bool, help="is dataset in json format")
-    # parser.add_argument("data_is_pkl", type=bool, help="is dataset in pkl format")
+    parser.add_argument("--data_is_json", default=False, type=bool, help="is dataset in json format")
+    parser.add_argument("--data_is_pkl", default=True, type=bool, help="is dataset in pkl format")
     parser.add_argument(
         "--label_columns",
         type=str,
