@@ -229,7 +229,6 @@ class ProcurementFlagsTagger(pl.LightningModule):
             )
         self.combine_last_layer = combine_last_layer
         self.model = self.bert_classifier_auto.base_model
-        # self.bert_classifier_auto.classifier.out_features = len(self.label_columns)
         self.pre_classifier = self.bert_classifier_auto.pre_classifier
         if self.combine_last_layer:
             self.bert_classifier_auto.classifier.in_features = (
@@ -240,17 +239,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
         ]
 
         self.dropout = self.bert_classifier_auto.dropout
-        # self.m = torch.nn.Linear(in_features=768, out_features= 2* len(label_columns))
-        # for i in range(0, 2* len(label_columns), 2):
-        #     self.m.weight.data[i] = self.bert_classifier_auto.classifier.weight.data[0]
-        #     self.m.weight.data[i + 1] = self.bert_classifier_auto.classifier.weight.data[1]
 
-        # self.non_text_cols = non_text_cols
         self.combine_last_layer = combine_last_layer
-        # if self.combine_last_layer:
-        #     self.classifier.in_features = self.bert.config.hidden_size + len(non_text_cols)
 
-        # self.criterion = torch.nn.CrossEntropyLoss()
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
         self.learning_rate = learning_rate
@@ -328,8 +319,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
             total_loss += F.cross_entropy(logits, labels[:, i])
             result_preds.append(preds)
 
-
-        predictions  = torch.cat(result_preds, dim=-1)
+        predictions = torch.cat(result_preds, dim=-1)
 
         self.log("train_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return {"loss": total_loss, "predictions": predictions, "labels": labels}
@@ -398,7 +388,6 @@ class ProcurementFlagsTagger(pl.LightningModule):
             logits = self.classifiers[i](pooled_output)  # (bs , num_labels)
             total_loss += F.cross_entropy(logits, labels[:, i])
 
-
         self.log("test_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return total_loss
 
@@ -417,8 +406,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
                 predictions.append(out_predictions)
 
         labels = torch.stack(labels).int()
-        predictions = torch.stack(predictions).reshape( len(outputs), len(self.label_columns),)
-
+        predictions = torch.stack(predictions).reshape(labels.size())
 
         if self.is_multilabel():
             auroc = AUROC(task="multilabel", num_labels=len(self.label_columns))
