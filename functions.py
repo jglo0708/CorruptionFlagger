@@ -20,7 +20,7 @@ from bert_classifier import (
     ProcurementNoticeDataModule,
     ProcurementFlagsTagger,
 )
-from utils import is_csv
+from utils import is_csv, is_local_files
 
 TEST_SIZE = 0.1
 RANDOM_SEED = 42
@@ -134,9 +134,12 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
     :return: None
     """
     # make directory to same checkpoints
-    dir_path = os.path.join(
-        args.checkpoint_path, str(args.bert_architecture).split("-")[0]
-    )
+    if is_local_files(args.bert_architecture):
+        dir_path = os.path.join(args.checkpoint_path, "custom_fine_tuned")
+    else:
+        dir_path = os.path.join(
+            args.checkpoint_path, str(args.bert_architecture).split("-")[0]
+        )
     os.makedirs(dir_path, exist_ok=True)
     model = ProcurementFlagsTagger(
         n_warmup_steps=warmup_steps,
@@ -157,7 +160,6 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
         monitor="val_loss",
         mode="min",
     )
-
     logger = TensorBoardLogger(
         "lightning_logs", name="corruption_indicators", log_graph=True
     )
@@ -193,11 +195,13 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
         trainer.test(datamodule=data_module, ckpt_path="best")
 
     if args.save_transformers_model:
+        transformers_path = os.path.join(dir_path, "HF_saved")
+        os.makedirs(transformers_path, exist_ok=True)
         #  Save the tokenizer and the backbone LM with HuggingFace's serialization.
         #  To avoid mixing PL's and HuggingFace's serialization:
         #  https://github.com/PyTorchLightning/pytorch-lightning/issues/3096#issuecomment-686877242
         best_model = ProcurementFlagsTagger.load_from_checkpoint(
             checkpoint_callback.best_model_path
         )
-        best_model.get_backbone().save_pretrained(dir_path)
-        best_model.tokenizer.save_pretrained(dir_path)
+        best_model.get_backbone().save_pretrained(transformers_path)
+        best_model.tokenizer.save_pretrained(transformers_path)

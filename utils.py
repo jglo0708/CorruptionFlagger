@@ -53,6 +53,11 @@ def is_local_files(path):
     else:
         return False
 
+def is_local_files(path):
+    if len(path.split("/")) > 1:
+        return True
+    else:
+        return False
 
 def get_cols(args):
     if path.exists(args.text_columns_dir):
