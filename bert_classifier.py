@@ -409,9 +409,21 @@ class ProcurementFlagsTagger(pl.LightningModule):
         predictions = torch.stack(predictions).reshape(labels.size())
 
         if self.is_multilabel():
-            auroc = AUROC(task="multilabel", num_labels=len(self.label_columns))
-            accuracy = Accuracy(task="multilabel", num_labels=len(self.label_columns))
-            f1 = F1Score(task="multilabel", num_labels=len(self.label_columns))
+            auroc = AUROC(
+                task="multilabel",
+                num_labels=len(self.label_columns),
+                average="weighted",
+            )
+            accuracy = Accuracy(
+                task="multilabel",
+                num_labels=len(self.label_columns),
+                average="weighted",
+            )
+            f1 = F1Score(
+                task="multilabel",
+                num_labels=len(self.label_columns),
+                average="weighted",
+            )
         else:
             auroc = AUROC(task="binary")
             accuracy = Accuracy(task="binary")
