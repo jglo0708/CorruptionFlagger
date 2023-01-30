@@ -326,29 +326,13 @@ class ProcurementFlagsTagger(pl.LightningModule):
             preds = torch.sigmoid(torch.argmax(logits, 1))
             target = labels[:, i].unsqueeze(1)
             total_loss += F.cross_entropy(logits, labels[:, i])
-            # total_loss += self.criterion(logits.view(-1, 1), labels[:,i].view(-1))
             result_preds.append(preds)
 
-        # pooled_output = outputs[1]
-        #
-        # pooled_output = self.dropout(pooled_output)
-        # logits = self.m(pooled_output)
-        #
-        # total_loss = self.criterion(logits, labels)
-        # output = []
-        # for i in range(len(self.label_columns)):
-        #     logits = self.classifiers[i](pre_classifier_input)
-        #
-        #     output.append(logits)
-        # preds = torch.sigmoid(torch.argmax(logits, 1))
-        # total_loss += self.criterion(logits, labels[i])
 
-        # preds_list.append(logits)
-
-        # result_preds = torch.cat(preds_list, dim=1)
+        predictions  = torch.cat(result_preds, dim=-1)
 
         self.log("train_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
-        return {"loss": total_loss, "predictions": result_preds, "labels": labels}
+        return {"loss": total_loss, "predictions": predictions, "labels": labels}
 
     def validation_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
@@ -380,15 +364,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         total_loss = 0
         for i in range(len(self.label_columns)):
             logits = self.classifiers[i](pooled_output)  # (bs, num_labels)
-            # preds = torch.sigmoid(torch.argmax(logits, 1))
-            # target = labels[:,i].unsqueeze(1)
             total_loss += F.cross_entropy(logits, labels[:, i])
-            # total_loss += self.criterion(logits.view(-1, 1), labels[:,i].view(-1))
-        # total_loss = 0
-        # for i in range(len(self.label_columns)):
-        #     logits = self.classifiers[i](pre_classifier_input)
-        #     # preds = torch.sigmoid(torch.argmax(logits, 1))
-        #     total_loss += self.criterion(logits, labels[i])
 
         self.log("val_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return total_loss
@@ -420,14 +396,8 @@ class ProcurementFlagsTagger(pl.LightningModule):
         total_loss = 0
         for i in range(len(self.label_columns)):
             logits = self.classifiers[i](pooled_output)  # (bs , num_labels)
-            # target = labels[:,i].unsqueeze(1)
             total_loss += F.cross_entropy(logits, labels[:, i])
-            # total_loss += self.criterion(logits.view(-1, 1), labels[:,i].view(-1))
-        # total_loss = 0
-        # for i in range(len(self.label_columns)):
-        #     logits = self.classifiers[i](pre_classifier_input)
-        #     # preds = torch.sigmoid(torch.argmax(logits, 1))
-        #     total_loss += self.criterion(logits, labels[i])
+
 
         self.log("test_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return total_loss
@@ -437,6 +407,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
         labels = []
         predictions = []
+
         for output in outputs:
             for out_labels in output["labels"]:
                 out_labels = out_labels.detach().cpu()
@@ -446,11 +417,13 @@ class ProcurementFlagsTagger(pl.LightningModule):
                 predictions.append(out_predictions)
 
         labels = torch.stack(labels).int()
-        predictions = torch.stack(predictions)
+        predictions = torch.stack(predictions).reshape( len(outputs), len(self.label_columns),)
+
+
         if self.is_multilabel():
-            auroc = AUROC(task="multilabel")
-            accuracy = Accuracy(task="multilabel")
-            f1 = F1Score(task="multilabel")
+            auroc = AUROC(task="multilabel", num_labels=len(self.label_columns))
+            accuracy = Accuracy(task="multilabel", num_labels=len(self.label_columns))
+            f1 = F1Score(task="multilabel", num_labels=len(self.label_columns))
         else:
             auroc = AUROC(task="binary")
             accuracy = Accuracy(task="binary")
