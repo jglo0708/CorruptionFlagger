@@ -225,7 +225,10 @@ class ProcurementFlagsTagger(pl.LightningModule):
             )
         self.combine_last_layer = combine_last_layer
         self.model = self.bert_classifier_auto.base_model
-        self.pre_classifier = self.bert_classifier_auto.pre_classifier
+        if self.bert_architecture == 'distilbert-base-multilingual-cased':
+            self.pre_classifier = self.bert_classifier_auto.pre_classifier
+        else:
+            self.pre_classifier = self.bert_classifier_auto.bert.pooler.Linear
         if self.combine_last_layer:
             self.bert_classifier_auto.classifier.in_features = (
                 self.bert.config.hidden_size + len(non_text_cols)
