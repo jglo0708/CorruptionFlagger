@@ -12,16 +12,16 @@ def main(args):
     seed_everything()
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
-    numerical_cols, categorical_cols = get_cols(args)
+    label_columns, text_columns, numerical_columns, categorical_columns = get_cols(args)
     logging.info("Train set size=%s", len(train_df))
     logging.info("Val set size=%s", len(val_df))
     logging.info("Test set size=%s", len(test_df))
     data_module = process_data(
-        args, train_df, val_df, test_df, numerical_cols, categorical_cols
+        args, train_df, val_df, test_df, label_columns, text_columns, numerical_columns, categorical_columns
     )
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
-    run_model(args, total_training_steps, warmup_steps, data_module)
+    run_model(args, total_training_steps, warmup_steps, data_module,label_columns)
     logger.info("Fine-tuning complete!")
 
 
@@ -40,17 +40,27 @@ if __name__ == "__main__":
     parser.add_argument("data_path", type=str, help="path to the dataset dir")
     parser.add_argument("--data_is_json", default=False, type=bool, help="is dataset in json format")
     parser.add_argument("--data_is_pkl", default=True, type=bool, help="is dataset in pkl format")
+    # parser.add_argument(
+    #     "--label_columns",
+    #     type=str,
+    #     nargs="+",
+    #     help="Column with the data label (e.g. fraud/no fraud)",
+    # )
+    # parser.add_argument(
+    #     "--text_columns",
+    #     type=str,
+    #     nargs="+",
+    #     help="Column with the text data (e.g. procurement description, etc.)",
+    # )
     parser.add_argument(
-        "--label_columns",
-        type=str,
-        nargs="+",
-        help="Column with the data label (e.g. fraud/no fraud)",
+        "--text_columns_dir",
+        default="data_utils/text_cols.txt",
+        help="Dir path to categorical columns file",
     )
     parser.add_argument(
-        "--text_columns",
-        type=str,
-        nargs="+",
-        help="Column with the text data (e.g. procurement description, etc.)",
+        "--label_columns_dir",
+        default="data_utils/label_cols.txt",
+        help="Dir path to categorical columns file",
     )
     parser.add_argument(
         "--checkpoint_path",

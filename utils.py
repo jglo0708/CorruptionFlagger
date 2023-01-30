@@ -55,6 +55,18 @@ def is_local_files(path):
 
 
 def get_cols(args):
+    if path.exists(args.text_columns_dir):
+
+        with open(args.text_columns_dir) as file:
+            text_columns = [line.rstrip() for line in file]
+    else:
+        text_columns = []
+    if path.exists(args.label_columns_dir):
+        with open(args.label_columns_dir) as file:
+            label_columns = [line.rstrip() for line in file]
+    else:
+        label_columns = []
+
     if path.exists(args.numerical_columns_dir):
 
         with open(args.numerical_columns_dir) as file:
@@ -67,4 +79,5 @@ def get_cols(args):
     else:
         categorical_columns = []
 
-    return numerical_columns, categorical_columns
+
+    return label_columns, text_columns, numerical_columns, categorical_columns
