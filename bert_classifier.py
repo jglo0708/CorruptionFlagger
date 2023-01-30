@@ -219,13 +219,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
             )
 
         else:
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                bert_architecture, local_files_only=True
-            )
+            self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
             self.bert_classifier_auto = (
-                AutoModelForSequenceClassification.from_pretrained(
-                    bert_architecture, local_files_only=True
-                )
+                AutoModelForSequenceClassification.from_pretrained(bert_architecture)
             )
         self.combine_last_layer = combine_last_layer
         self.model = self.bert_classifier_auto.base_model
