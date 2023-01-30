@@ -5,6 +5,8 @@ import string
 
 import numpy as np
 import torch
+import os.path
+from os import path
 
 
 def calc_steps(df, args):
@@ -21,7 +23,7 @@ def get_label_colums(df, args):
 
 def is_csv(infile):
     try:
-        with open(infile, newline='') as csvfile:
+        with open(infile, newline="") as csvfile:
             start = csvfile.read(4096)
 
             # isprintable does not allow newlines, printable does not allow umlauts...
@@ -33,9 +35,10 @@ def is_csv(infile):
         # Could not get a csv dialect -> probably not a csv.
         return False
 
+
 def seed_everything(seed=42):
     random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -49,3 +52,19 @@ def is_local_files(path):
         return True
     else:
         return False
+
+
+def get_cols(args):
+    if path.exists(args.numerical_columns_dir):
+
+        with open(args.numerical_columns_dir) as file:
+            numerical_columns = [line.rstrip() for line in file]
+    else:
+        numerical_columns = []
+    if path.exists(args.categorical_columns_dir):
+        with open(args.categorical_columns_dir) as file:
+            categorical_columns = [line.rstrip() for line in file]
+    else:
+        categorical_columns = []
+
+    return numerical_columns, categorical_columns

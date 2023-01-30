@@ -8,7 +8,7 @@ jan.globisz@studbocconi.it
 """
 
 import os
-
+from torch.nn import functional as F
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -64,25 +64,29 @@ class ProcurementNoticeDataset(Dataset):
 
     def __getitem__(self, index: int):
         data_row = self.df.iloc[index]
-        notice_text = data_row[self.text_columns]
-        if (len(self.categorical_columns)==0) &  (len(self.categorical_columns)==0):
-            categorical_features = torch.empty((1,1))
-            numerical_features =  torch.empty((1,1))
+        notice_text = data_row[self.text_columns].values.tolist()
+        if (len(self.categorical_columns) == 0) & (len(self.categorical_columns) == 0):
+            categorical_features = torch.empty(1)
+            numerical_features = torch.empty(1)
         else:
-            categorical_features = data_row[self.categorical_columns]
-            numerical_features = data_row[self.numerical_columns]
+            categorical_features = torch.tensor(
+                data_row[self.categorical_columns].values
+            )
+            numerical_features = torch.tensor(data_row[self.numerical_columns].values)
         if self.num_cat_to_text:
 
-            # Concatenate text, numerical and categorical data
-            input_data = torch.cat(
-                (notice_text, numerical_features, categorical_features), 0
-            )
+            # Concatenate text, numerical and categorical data SET TO STR TODO
+            non_text_cols = data_row[
+                self.categorical_columns + self.numerical_columns
+            ].apply(", ".join, axis=1)
+            non_text_cols_vals = non_text_cols.values.tolist()
+            input_data = ", ".join([notice_text, non_text_cols_vals])
         else:
             input_data = notice_text
-        labels = torch.tensor(int(data_row[self.label_columns])).long()
+        labels = torch.tensor(data_row[self.label_columns].astype(int).values)
 
         encoding = self.tokenizer.encode_plus(
-            input_data,
+            input_data[0],
             add_special_tokens=True,
             max_length=self.max_token_len,
             return_token_type_ids=False,
@@ -195,8 +199,8 @@ class ProcurementFlagsTagger(pl.LightningModule):
         learning_rate: float,
         n_training_steps=None,
         n_warmup_steps=None,
-        non_text_cols = None,
-        combine_last_layer = False,
+        non_text_cols=None,
+        combine_last_layer=False,
     ):
 
         super().__init__()
@@ -208,30 +212,45 @@ class ProcurementFlagsTagger(pl.LightningModule):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 bert_architecture, local_files_only=True
             )
-            self.bert_classifier_auto = AutoModelForSequenceClassification.from_pretrained(
-                bert_architecture, local_files_only=True
+            self.bert_classifier_auto = (
+                AutoModelForSequenceClassification.from_pretrained(
+                    bert_architecture, local_files_only=True
+                )
             )
 
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(
                 bert_architecture, local_files_only=True
             )
-            self.bert_classifier_auto = AutoModelForSequenceClassification.from_pretrained(
-                bert_architecture, local_files_only=True
+            self.bert_classifier_auto = (
+                AutoModelForSequenceClassification.from_pretrained(
+                    bert_architecture, local_files_only=True
+                )
             )
-
-        self.model = self.bert_classifier_auto.base_model
-        self.bert_classifier_auto.classifier.out_features = len(self.label_columns)
-        self.pre_classifier = self.bert_classifier_auto.pre_classifier
-        self.classifiers = [self.bert_classifier_auto.classifier for i in range(len(label_columns))]
-        self.dropout = [self.bert_classifier_auto.dropout for i in range(len(label_columns))]
-
-        self.non_text_cols = non_text_cols
         self.combine_last_layer = combine_last_layer
+        self.model = self.bert_classifier_auto.base_model
+        # self.bert_classifier_auto.classifier.out_features = len(self.label_columns)
+        self.pre_classifier = self.bert_classifier_auto.pre_classifier
         if self.combine_last_layer:
-            self.pre_classifier.in_features = self.bert.config.hidden_size + len(non_text_cols)
+            self.bert_classifier_auto.classifier.in_features = (
+                self.bert.config.hidden_size + len(non_text_cols)
+            )
+        self.classifiers = [
+            self.bert_classifier_auto.classifier for i in range(len(label_columns))
+        ]
 
-        self.criterion = torch.nn.CrossEntropyLoss()
+        self.dropout = self.bert_classifier_auto.dropout
+        # self.m = torch.nn.Linear(in_features=768, out_features= 2* len(label_columns))
+        # for i in range(0, 2* len(label_columns), 2):
+        #     self.m.weight.data[i] = self.bert_classifier_auto.classifier.weight.data[0]
+        #     self.m.weight.data[i + 1] = self.bert_classifier_auto.classifier.weight.data[1]
+
+        # self.non_text_cols = non_text_cols
+        self.combine_last_layer = combine_last_layer
+        # if self.combine_last_layer:
+        #     self.classifier.in_features = self.bert.config.hidden_size + len(non_text_cols)
+
+        # self.criterion = torch.nn.CrossEntropyLoss()
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
         self.learning_rate = learning_rate
@@ -246,87 +265,169 @@ class ProcurementFlagsTagger(pl.LightningModule):
         return self.model
 
     def forward(self, i, input_ids, attention_mask, non_text, labels):
-        embedding = self.model(
-            input_ids=input_ids, attention_mask=attention_mask
-        )
-        if self.combine_last_layer:
-            embedding = torch.cat(embedding, non_text)
 
-        pre_classifier_input = self.pre_classifier(embedding)
+        hidden_state = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            output_attentions=True,
+            return_dict=True,
+        ).hidden_states[
+            0
+        ]  # (bs, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
+        if self.bert_architecture.split("-") == "distillbert":
+            pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
+        elif self.bert_architecture.split("-") == "bert":
+            pooled_output = torch.nn.Tanh()()(pooled_output)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        if self.combine_last_layer:
+            pooled_output = torch.cat(pooled_output, non_text)
         output = []
-        for i in range(len(self.label_columns)):
-            logits = self.classifiers[i](pre_classifier_input)
-            preds = torch.sigmoid(torch.argmax(logits,1))
+        for i, label in range(len(self.label_columns)):
+            logits = self.classifiers[i](pooled_output)  # (bs, num_labels)
+            preds = torch.sigmoid(torch.argmax(logits, 1))
             output.append(preds)
 
         return output
 
     def training_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
-        categorical_features = batch['categorical_features']
-        numerical_features = batch['numerical_features']
+        categorical_features = batch["categorical_features"]
+        numerical_features = batch["numerical_features"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
-        embedding = self.model(
-            input_ids=input_ids, attention_mask=attention_mask
-        )
-        if self.combine_last_layer:
-            embedding = torch.cat(embedding, categorical_features, numerical_features)
-        pre_classifier_input = self.pre_classifier(embedding)
+        hidden_state = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            output_attentions=True,
+            return_dict=True,
+        ).hidden_states[
+            0
+        ]  # (bs, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
+        if self.bert_architecture.split("-") == "distillbert":
+            pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
+        elif self.bert_architecture.split("-") == "bert":
+            pooled_output = torch.nn.Tanh()()(pooled_output)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        if self.combine_last_layer:  # TODO
+            pooled_output = torch.cat(
+                (pooled_output, numerical_features, categorical_features)
+            )
+        result_preds = []
         total_loss = 0
-        preds_list = []
         for i in range(len(self.label_columns)):
-            logits = self.classifiers[i](pre_classifier_input)
+            logits = self.classifiers[i](pooled_output)  # (bs, num_labels)
             preds = torch.sigmoid(torch.argmax(logits, 1))
-            total_loss += self.criterion(preds, labels[i])
+            target = labels[:, i].unsqueeze(1)
+            total_loss += F.cross_entropy(logits, labels[:, i])
+            # total_loss += self.criterion(logits.view(-1, 1), labels[:,i].view(-1))
+            result_preds.append(preds)
 
-            preds_list.append(preds)
+        # pooled_output = outputs[1]
+        #
+        # pooled_output = self.dropout(pooled_output)
+        # logits = self.m(pooled_output)
+        #
+        # total_loss = self.criterion(logits, labels)
+        # output = []
+        # for i in range(len(self.label_columns)):
+        #     logits = self.classifiers[i](pre_classifier_input)
+        #
+        #     output.append(logits)
+        # preds = torch.sigmoid(torch.argmax(logits, 1))
+        # total_loss += self.criterion(logits, labels[i])
 
-        result_preds = torch.cat(preds_list, dim=1)
+        # preds_list.append(logits)
+
+        # result_preds = torch.cat(preds_list, dim=1)
 
         self.log("train_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return {"loss": total_loss, "predictions": result_preds, "labels": labels}
 
     def validation_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
-        categorical_features = batch['categorical_features']
-        numerical_features = batch['numerical_features']
+        categorical_features = batch["categorical_features"]
+        numerical_features = batch["numerical_features"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
-        embedding = self.model(
-            input_ids=input_ids, attention_mask=attention_mask
-        )
-        if self.combine_last_layer:
-            embedding = torch.cat(embedding, categorical_features, numerical_features).last_hidden_state
-        pre_classifier_input = self.pre_classifier(embedding)
+        hidden_state = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            output_attentions=True,
+            return_dict=True,
+        ).hidden_states[
+            0
+        ]  # (bs, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
+        if self.bert_architecture.split("-") == "distillbert":
+            pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
+        elif self.bert_architecture.split("-") == "bert":
+            pooled_output = torch.nn.Tanh()()(pooled_output)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        if self.combine_last_layer:  # TODO
+            pooled_output = torch.cat(
+                (pooled_output, numerical_features, categorical_features)
+            )
         total_loss = 0
         for i in range(len(self.label_columns)):
-            logits = self.classifiers[i](pre_classifier_input)
-            preds = torch.sigmoid(torch.argmax(logits, 1))
-            total_loss += self.criterion(preds, labels[i])
+            logits = self.classifiers[i](pooled_output)  # (bs, num_labels)
+            # preds = torch.sigmoid(torch.argmax(logits, 1))
+            # target = labels[:,i].unsqueeze(1)
+            total_loss += F.cross_entropy(logits, labels[:, i])
+            # total_loss += self.criterion(logits.view(-1, 1), labels[:,i].view(-1))
+        # total_loss = 0
+        # for i in range(len(self.label_columns)):
+        #     logits = self.classifiers[i](pre_classifier_input)
+        #     # preds = torch.sigmoid(torch.argmax(logits, 1))
+        #     total_loss += self.criterion(logits, labels[i])
+
         self.log("val_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return total_loss
 
     def test_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
-        categorical_features = batch['categorical_features']
-        numerical_features = batch['numerical_features']
+        categorical_features = batch["categorical_features"]
+        numerical_features = batch["numerical_features"]
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
-        embedding = self.model(
-            input_ids=input_ids, attention_mask=attention_mask
-        )
+        hidden_state = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+            output_attentions=True,
+            return_dict=True,
+        ).hidden_states[
+            0
+        ]  # (bs, seq_len, dim)
+        pooled_output = hidden_state[:, 0]  # (bs, dim)
+        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
+        pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
+        pooled_output = self.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:
-            embedding = torch.cat(embedding, categorical_features, numerical_features)
-        pre_classifier_input = self.pre_classifier(embedding)
+            pooled_output = torch.cat(
+                (pooled_output, numerical_features, categorical_features)
+            )
         total_loss = 0
         for i in range(len(self.label_columns)):
-            logits = self.classifiers[i](pre_classifier_input)
-            preds = torch.sigmoid(torch.argmax(logits, 1))
-            total_loss += self.criterion(preds, labels[i])
+            logits = self.classifiers[i](pooled_output)  # (bs , num_labels)
+            # target = labels[:,i].unsqueeze(1)
+            total_loss += F.cross_entropy(logits, labels[:, i])
+            # total_loss += self.criterion(logits.view(-1, 1), labels[:,i].view(-1))
+        # total_loss = 0
+        # for i in range(len(self.label_columns)):
+        #     logits = self.classifiers[i](pre_classifier_input)
+        #     # preds = torch.sigmoid(torch.argmax(logits, 1))
+        #     total_loss += self.criterion(logits, labels[i])
 
         self.log("test_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return total_loss
@@ -337,9 +438,11 @@ class ProcurementFlagsTagger(pl.LightningModule):
         labels = []
         predictions = []
         for output in outputs:
-            for out_labels in output["labels"].detach().cpu():
+            for out_labels in output["labels"]:
+                out_labels = out_labels.detach().cpu()
                 labels.append(out_labels)
-            for out_predictions in output["predictions"].detach().cpu():
+            for out_predictions in output["predictions"]:
+                out_predictions = out_predictions.detach().cpu()
                 predictions.append(out_predictions)
 
         labels = torch.stack(labels).int()

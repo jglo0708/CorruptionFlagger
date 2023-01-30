@@ -2,7 +2,7 @@ import argparse
 import logging
 
 from functions import read_and_split, process_data, run_model
-from utils import calc_steps, seed_everything
+from utils import calc_steps, seed_everything, get_cols
 import warnings
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -12,10 +12,13 @@ def main(args):
     seed_everything()
     logger.info("Reading and processing dataset")
     train_df, val_df, test_df = read_and_split(args)
+    numerical_cols, categorical_cols = get_cols(args)
     logging.info("Train set size=%s", len(train_df))
     logging.info("Val set size=%s", len(val_df))
     logging.info("Test set size=%s", len(test_df))
-    data_module = process_data(args, train_df, val_df, test_df)
+    data_module = process_data(
+        args, train_df, val_df, test_df, numerical_cols, categorical_cols
+    )
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
     run_model(args, total_training_steps, warmup_steps, data_module)
@@ -38,13 +41,15 @@ if __name__ == "__main__":
     parser.add_argument("data_is_json", type=bool, help="is dataset in json format")
     # parser.add_argument("data_is_pkl", type=bool, help="is dataset in pkl format")
     parser.add_argument(
-        "label_columns",
+        "--label_columns",
         type=str,
+        nargs="+",
         help="Column with the data label (e.g. fraud/no fraud)",
     )
     parser.add_argument(
-        "text_columns",
+        "--text_columns",
         type=str,
+        nargs="+",
         help="Column with the text data (e.g. procurement description, etc.)",
     )
     parser.add_argument(
@@ -84,18 +89,15 @@ if __name__ == "__main__":
         help="Learning rate for the optimiser",
     )
     parser.add_argument(
-        "--categorical_columns",
-        type=list,
-        default=[],
-        nargs="+",
-        help="Learning rate for the optimiser",
+        "--categorical_columns_dir",
+        default="data_utils/categoricals.txt",
+        help="Dir path to categorical columns file",
     )
     parser.add_argument(
-        "--numerical_columns",
-        type=list,
-        default=[],
-        nargs="+",
-        help="Learning rate for the optimiser",
+        "--numerical_columns_dir",
+        type=str,
+        default="data_utils/numericals.txt",
+        help="Dir path to numerical columns file",
     )
     parser.add_argument(
         "--num_cat_to_text",
