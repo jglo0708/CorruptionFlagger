@@ -17,7 +17,7 @@ from transformers import (
     AdamW,
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    get_linear_schedule_with_warmup,
+    get_linear_schedule_with_warmup, BertForSequenceClassification, DistilBertForSequenceClassification,
 )
 
 from utils import is_local_files
@@ -225,9 +225,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
             )
         self.combine_last_layer = combine_last_layer
         self.model = self.bert_classifier_auto.base_model
-        if self.bert_architecture == 'distilbert-base-multilingual-cased':
+        if isinstance(self.bert_classifier_auto, DistilBertForSequenceClassification):
             self.pre_classifier = self.bert_classifier_auto.pre_classifier
-        else:
+        elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
             self.pre_classifier = self.bert_classifier_auto.bert.pooler.dense
         if self.combine_last_layer:
             self.bert_classifier_auto.classifier.in_features = (
