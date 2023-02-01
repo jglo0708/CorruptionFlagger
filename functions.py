@@ -261,7 +261,7 @@ def train_flagger_tune(args, config, warmup_steps,total_training_steps, dir_path
     trainer.fit(model, data_module)
 
 
-def tune_flagger_asha(args,data_module, warmup_steps,total_training_steps, num_epochs=10, gpus_per_trial=2):
+def tune_flagger_asha(args, data_module, warmup_steps,total_training_steps, num_epochs=10, gpus_per_trial=2):
     # make directory to same checkpoints
     if is_local_files(args.bert_architecture):
         dir_path = os.path.join(args.checkpoint_path, "custom_fine_tuned")
@@ -288,7 +288,6 @@ def tune_flagger_asha(args,data_module, warmup_steps,total_training_steps, num_e
 
     train_fn_with_parameters = tune.with_parameters(train_flagger_tune,
                                                     num_epochs=num_epochs,
-                                                    args=args,
                                                     warmup_steps = warmup_steps,
                                                     total_training_steps = total_training_steps,
                                                     dir_path = dir_path,
