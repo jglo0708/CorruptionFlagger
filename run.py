@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from functions import read_and_split, process_data, run_model
+from functions import read_and_split, process_data, run_model, tune_flagger_asha
 from utils import calc_steps, seed_everything, get_cols
 import warnings
 
@@ -28,7 +28,8 @@ def main(args):
     )
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
-    run_model(args, total_training_steps, warmup_steps, data_module, label_columns)
+    # run_model(args, total_training_steps, warmup_steps, data_module, label_columns)
+    tune_flagger_asha(args, data_module, warmup_steps, total_training_steps)
     logger.info("Fine-tuning complete!")
 
 
@@ -70,14 +71,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--batch_size",
-        default=8,
+        default=16,
         type=int,
         help="Batch size - change if needed (reduce for lower memory usage)",
     )
     parser.add_argument(
         "--n_epochs",
         type=int,
-        default=5,
+        default=10,
         help="Number of epochs to run  - change if needed",
     )
     parser.add_argument(
@@ -89,14 +90,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_sequence_len",
         type=int,
-        default=256,
+        default=512,
         help="Maximum sequence length of tokens to use in Bert model",
-    )
-    parser.add_argument(
-        "--learning_rate",
-        type=float,
-        default=2e-5,
-        help="Learning rate for the optimiser",
     )
     parser.add_argument(
         "--categorical_columns_dir",
@@ -114,12 +109,6 @@ if __name__ == "__main__":
         type=bool,
         default=False,
         help="Whether we combine the numerical and categorical&numerical features with text ",
-    )
-    parser.add_argument(
-        "--combine_last_layer",
-        type=bool,
-        default=False,
-        help="Whether we combine the numerical and categorical&numerical features with BERT embedding ",
     )
     parser.add_argument(
         "--save_transformers_model",

@@ -38,7 +38,7 @@ class ProcurementNoticeDataset(Dataset):
         categorical_columns: list = [],
         numerical_columns: list = [],
         label_columns: list = ["label_encoded"],
-        num_cat_to_text: bool = False,
+        # num_cat_to_text: bool = False,
     ):
         if is_local_files(bert_architecture):
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -53,7 +53,7 @@ class ProcurementNoticeDataset(Dataset):
         self.numerical_columns = numerical_columns
         self.categorical_columns = categorical_columns
         self.text_columns = text_columns
-        self.num_cat_to_text = num_cat_to_text
+        # self.num_cat_to_text = num_cat_to_text
 
     def is_multilabel(self):
         if len(self.label_columns) > 1:
@@ -75,20 +75,20 @@ class ProcurementNoticeDataset(Dataset):
                 data_row[self.categorical_columns].values
             )
             numerical_features = torch.tensor(data_row[self.numerical_columns].values)
-        if self.num_cat_to_text:
-
-            # Concatenate text, numerical and categorical data SET TO STR TODO
-            non_text_cols = data_row[
-                self.categorical_columns + self.numerical_columns
-            ].apply(", ".join, axis=1)
-            non_text_cols_vals = non_text_cols.values.tolist()
-            input_data = ", ".join([notice_text, non_text_cols_vals])
-        else:
-            input_data = notice_text
+        # if self.num_cat_to_text:
+        #
+        #     # Concatenate text, numerical and categorical data SET TO STR TODO
+        #     non_text_cols = data_row[
+        #         self.categorical_columns + self.numerical_columns
+        #     ].apply(", ".join, axis=1)
+        #     non_text_cols_vals = non_text_cols.values.tolist()
+        #     input_data = ", ".join([notice_text, non_text_cols_vals])
+        # else:
+        #     input_data = notice_text
         labels = torch.tensor(data_row[self.label_columns].astype(int).values)
 
         encoding = self.tokenizer.encode_plus(
-            input_data[0],
+            notice_text,
             add_special_tokens=True,
             max_length=self.max_token_len,
             return_token_type_ids=False,
@@ -97,23 +97,23 @@ class ProcurementNoticeDataset(Dataset):
             return_attention_mask=True,
             return_tensors="pt",
         )
-        if self.num_cat_to_text:
-
-            return dict(
-                input_data=input_data,
-                input_ids=encoding["input_ids"].flatten(),
-                attention_mask=encoding["attention_mask"].flatten(),
-                labels=labels,
-            )
-        else:
-            return dict(
-                input_data=input_data,
-                categorical_features=categorical_features,
-                numerical_features=numerical_features,
-                input_ids=encoding["input_ids"].flatten(),
-                attention_mask=encoding["attention_mask"].flatten(),
-                labels=labels,
-            )
+        # if self.num_cat_to_text:
+        #
+        #     return dict(
+        #         input_data=input_data,
+        #         input_ids=encoding["input_ids"].flatten(),
+        #         attention_mask=encoding["attention_mask"].flatten(),
+        #         labels=labels,
+        #     )
+        # else:
+        return dict(
+            input_data=notice_text,
+            categorical_features=categorical_features,
+            numerical_features=numerical_features,
+            input_ids=encoding["input_ids"].flatten(),
+            attention_mask=encoding["attention_mask"].flatten(),
+            labels=labels,
+        )
 
 
 class ProcurementNoticeDataModule(pl.LightningDataModule):
@@ -129,7 +129,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         categorical_columns: list = None,
         numerical_columns: list = None,
         label_columns: list = ["label_encoded"],
-        num_cat_to_text: bool = False,
+        # num_cat_to_text: bool = False,
     ):
         super().__init__()
         self.test_dataset = None
@@ -145,7 +145,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.numerical_columns = numerical_columns
         self.categorical_columns = categorical_columns
         self.text_columns = text_columns
-        self.num_cat_to_text = num_cat_to_text
+        # self.num_cat_to_text = num_cat_to_text
 
     def setup(self, stage=None):
         self.train_dataset = ProcurementNoticeDataset(
@@ -156,7 +156,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
             categorical_columns=self.categorical_columns,
             numerical_columns=self.numerical_columns,
             label_columns=self.label_columns,
-            num_cat_to_text=self.num_cat_to_text,
+            # num_cat_to_text=self.num_cat_to_text,
         )
 
         self.val_dataset = ProcurementNoticeDataset(
@@ -167,7 +167,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
             categorical_columns=self.categorical_columns,
             numerical_columns=self.numerical_columns,
             label_columns=self.label_columns,
-            num_cat_to_text=self.num_cat_to_text,
+            # num_cat_to_text=self.num_cat_to_text,
         )
 
         self.test_dataset = ProcurementNoticeDataset(
@@ -178,7 +178,7 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
             categorical_columns=self.categorical_columns,
             numerical_columns=self.numerical_columns,
             label_columns=self.label_columns,
-            num_cat_to_text=self.num_cat_to_text,
+            # num_cat_to_text=self.num_cat_to_text,
         )
 
     def train_dataloader(self):
@@ -198,17 +198,20 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self,
         label_columns: list,
         bert_architecture: str,
-        learning_rate: float,
+        config: dict,
         n_training_steps=None,
         n_warmup_steps=None,
         non_text_cols=None,
-        combine_last_layer=False,
     ):
 
         super().__init__()
         self.save_hyperparameters()
         self.bert_architecture = bert_architecture
         self.label_columns = label_columns
+
+        self.combine_last_layer = config['combine_last_layer']
+        self.lr = config['lr']
+        self.wd = config['wd']
 
         if is_local_files(self.bert_architecture):
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -241,12 +244,8 @@ class ProcurementFlagsTagger(pl.LightningModule):
         ]
 
         self.model.dropout = self.bert_classifier_auto.dropout
-
-        self.combine_last_layer = combine_last_layer
-
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
-        self.learning_rate = learning_rate
 
     def is_multilabel(self):
         if len(self.label_columns) > 1:
@@ -456,7 +455,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
     def configure_optimizers(self):
 
-        optimizer = AdamW(self.parameters(), lr=self.learning_rate)
+        optimizer = AdamW(self.parameters(), lr=self.lr, weight_decay=self.wd)
 
         scheduler = get_linear_schedule_with_warmup(
             optimizer,

@@ -9,6 +9,9 @@ jan.globisz@studbocconi.it
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 import pytorch_lightning as pl
+from ray.tune import CLIReporter
+from ray.tune.schedulers import ASHAScheduler
+from ray import tune
 
 from sklearn.model_selection import train_test_split
 import pathlib
@@ -118,7 +121,7 @@ def process_data(
         numerical_columns=numerical_columns,
         categorical_columns=categorical_columns,
         label_columns=label_columns,
-        num_cat_to_text=args.num_cat_to_text,
+        # num_cat_to_text=args.num_cat_to_text,
     )
 
     return data_module
@@ -141,6 +144,7 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
             args.checkpoint_path, str(args.bert_architecture).split("-")[0]
         )
     os.makedirs(dir_path, exist_ok=True)
+
     model = ProcurementFlagsTagger(
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
@@ -205,3 +209,125 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
         )
         best_model.get_backbone().save_pretrained(transformers_path)
         best_model.tokenizer.save_pretrained(transformers_path)
+
+
+def train_flagger_tune(args, config, warmup_steps,total_training_steps, dir_path, data_module, num_epochs=10, num_gpus=2,):
+
+    model = ProcurementFlagsTagger(
+        config = config,
+        n_warmup_steps=warmup_steps,
+        n_training_steps=total_training_steps,
+        bert_architecture=args.bert_architecture,
+        label_columns=data_module.label_columns,
+        non_text_cols=data_module.numerical_columns + data_module.categorical_columns,
+    )
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=dir_path,
+        save_last=True,
+        save_top_k=1,
+        verbose=True,
+        filename="PL--{epoch}-{val_loss:.3f}-{train_loss:.3f}",
+        monitor="val_loss",
+        mode="min",
+    )
+    logger = TensorBoardLogger(
+        "lightning_logs", name="corruption_indicators", log_graph=True
+    )
+    logger.log_hyperparams(
+        {
+            "epochs": args.n_epochs,
+            "learning_rate": args.learning_rate,
+            "model": args.bert_architecture,
+        }
+    )
+    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=2)
+    if args.resume_from_checkpoint is not None:
+        trainer = pl.Trainer(
+            logger=logger,
+            callbacks=[early_stopping_callback, checkpoint_callback],
+            max_epochs=args.n_epochs,
+            resume_from_checkpoint=args.resume_from_checkpoint,
+            accelerator="gpu",
+            # strategy='dp',
+        )
+    else:
+        trainer = pl.Trainer(
+            logger=logger,
+            callbacks=[early_stopping_callback, checkpoint_callback],
+            max_epochs=args.n_epochs,
+            accelerator="gpu",
+            # strategy='dp',
+        )
+    trainer.fit(model, data_module)
+
+
+def tune_flagger_asha(args,data_module, warmup_steps,total_training_steps, num_epochs=10, gpus_per_trial=2):
+    # make directory to same checkpoints
+    if is_local_files(args.bert_architecture):
+        dir_path = os.path.join(args.checkpoint_path, "custom_fine_tuned")
+    else:
+        dir_path = os.path.join(
+            args.checkpoint_path, str(args.bert_architecture).split("-")[0]
+        )
+    os.makedirs(dir_path, exist_ok=True)
+    config = {
+        "lr": tune.loguniform(1e-4, 1e-1),
+        # "batch_size": tune.choice([8, 16, 32]),
+        "weight_decay": tune.loguniform(1e-4, 1e-1),
+        "combine_features": tune.choice([True, False]),
+    }
+
+    scheduler = ASHAScheduler(
+        max_t=num_epochs,
+        grace_period=1,
+        reduction_factor=2)
+
+    reporter = CLIReporter(
+        parameter_columns=[ "lr",'weight_decay','combine_features'],
+        metric_columns=["loss", "mean_accuracy", "training_iteration"])
+
+    train_fn_with_parameters = tune.with_parameters(train_flagger_tune,
+                                                    num_epochs=num_epochs,
+                                                    args=args,
+                                                    warmup_steps = warmup_steps,
+                                                    total_training_steps = total_training_steps,
+                                                    dir_path = dir_path,
+                                                    data_module = data_module,
+                                                    num_gpus=2,)
+                                                    # num_gpus=gpus_per_trial,
+
+    resources_per_trial = {"cpu": 1, "gpu": gpus_per_trial}
+
+
+    analysis = tune.run(train_fn_with_parameters,
+        resources_per_trial=resources_per_trial,
+        metric="loss",
+        mode="min",
+        config=config,
+        scheduler=scheduler,
+        progress_reporter=reporter,
+        name="tune_corruption_flagger_asha")
+
+    print("Best hyperparameters found were: ", analysis.best_config)
+
+    # if args.run_test:
+    #     # test on the dataset in-distribution
+    #     trainer.test(datamodule=data_module, ckpt_path="best")
+    #
+    # if args.save_transformers_model:
+    #     transformers_path = os.path.join(dir_path, "HF_saved")
+    #     os.makedirs(transformers_path, exist_ok=True)
+    #     #  Save the tokenizer and the backbone LM with HuggingFace's serialization.
+    #     #  To avoid mixing PL's and HuggingFace's serialization:
+    #     #  https://github.com/PyTorchLightning/pytorch-lightning/issues/3096#issuecomment-686877242
+    #     best_model = ProcurementFlagsTagger.load_from_checkpoint(
+    #         checkpoint_callback.best_model_path
+    #     )
+    #     best_model.get_backbone().save_pretrained(transformers_path)
+    #     best_model.tokenizer.save_pretrained(transformers_path)
+
+
+
+
+
+
