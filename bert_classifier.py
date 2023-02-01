@@ -17,7 +17,9 @@ from transformers import (
     AdamW,
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    get_linear_schedule_with_warmup, BertForSequenceClassification, DistilBertForSequenceClassification,
+    get_linear_schedule_with_warmup,
+    BertForSequenceClassification,
+    DistilBertForSequenceClassification,
 )
 
 from utils import is_local_files
@@ -212,10 +214,8 @@ class ProcurementFlagsTagger(pl.LightningModule):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 bert_architecture, local_files_only=True
             )
-            self.bert_classifier_auto = (
-                AutoModelForSequenceClassification.from_pretrained(
-                    bert_architecture, local_files_only=True
-                )
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                bert_architecture, local_files_only=True
             )
 
         else:
@@ -224,20 +224,23 @@ class ProcurementFlagsTagger(pl.LightningModule):
                 AutoModelForSequenceClassification.from_pretrained(bert_architecture)
             )
         self.combine_last_layer = combine_last_layer
-        self.model = self.bert_classifier_auto.base_model
+        self.model = self.bert_classifier_auto
+        self.model.base = self.bert_classifier_auto.base_model
         if isinstance(self.bert_classifier_auto, DistilBertForSequenceClassification):
-            self.pre_classifier = self.bert_classifier_auto.pre_classifier
+            self.model.pre_classifier = self.bert_classifier_auto.pre_classifier
         elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
-            self.pre_classifier = self.bert_classifier_auto.bert.pooler.dense
+            self.model.pre_classifier = self.bert_classifier_auto.bert.pooler.dense
+        else:
+            pass
         if self.combine_last_layer:
             self.bert_classifier_auto.classifier.in_features = (
                 self.bert.config.hidden_size + len(non_text_cols)
             )
-        self.classifiers = [
+        self.model.classifiers = [
             self.bert_classifier_auto.classifier for i in range(len(label_columns))
         ]
 
-        self.dropout = self.bert_classifier_auto.dropout
+        self.model.dropout = self.bert_classifier_auto.dropout
 
         self.combine_last_layer = combine_last_layer
 
@@ -256,7 +259,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
     def forward(self, i, input_ids, attention_mask, non_text, labels):
 
-        hidden_state = self.model(
+        hidden_state = self.model.base(
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_hidden_states=True,
@@ -266,17 +269,17 @@ class ProcurementFlagsTagger(pl.LightningModule):
             0
         ]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
-        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        if self.bert_architecture.split("-") == "distillbert":
+        pooled_output = self.model.pre_classifier(pooled_output)  # (bs, dim)
+        if isinstance(self.model, DistilBertForSequenceClassification):
             pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
-        elif self.bert_architecture.split("-") == "bert":
+        elif isinstance(self.model, BertForSequenceClassification):
             pooled_output = torch.nn.Tanh()()(pooled_output)
-        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:
             pooled_output = torch.cat(pooled_output, non_text)
         output = []
         for i, label in range(len(self.label_columns)):
-            logits = self.classifiers[i](pooled_output)  # (bs, num_labels)
+            logits = self.model.classifiers[i](pooled_output)  # (bs, num_labels)
             preds = torch.sigmoid(torch.argmax(logits, 1))
             output.append(preds)
 
@@ -289,7 +292,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
-        hidden_state = self.model(
+        hidden_state = self.model.base(
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_hidden_states=True,
@@ -299,12 +302,12 @@ class ProcurementFlagsTagger(pl.LightningModule):
             0
         ]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
-        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        if self.bert_architecture.split("-") == "distillbert":
+        pooled_output = self.model.pre_classifier(pooled_output)  # (bs, dim)
+        if isinstance(self.bert_classifier_auto, DistilBertForSequenceClassification):
             pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
-        elif self.bert_architecture.split("-") == "bert":
+        elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
             pooled_output = torch.nn.Tanh()()(pooled_output)
-        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:  # TODO
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features)
@@ -312,7 +315,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         result_preds = []
         total_loss = 0
         for i in range(len(self.label_columns)):
-            logits = self.classifiers[i](pooled_output)  # (bs, num_labels)
+            logits = self.model.classifiers[i](pooled_output)  # (bs, num_labels)
             preds = torch.sigmoid(torch.argmax(logits, 1))
             target = labels[:, i].unsqueeze(1)
             total_loss += F.cross_entropy(logits, labels[:, i])
@@ -330,7 +333,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
-        hidden_state = self.model(
+        hidden_state = self.model.base(
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_hidden_states=True,
@@ -340,19 +343,19 @@ class ProcurementFlagsTagger(pl.LightningModule):
             0
         ]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
-        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
-        if self.bert_architecture.split("-") == "distillbert":
+        pooled_output = self.model.pre_classifier(pooled_output)  # (bs, dim)
+        if isinstance(self.bert_classifier_auto, DistilBertForSequenceClassification):
             pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
-        elif self.bert_architecture.split("-") == "bert":
+        elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
             pooled_output = torch.nn.Tanh()()(pooled_output)
-        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:  # TODO
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features)
             )
         total_loss = 0
         for i in range(len(self.label_columns)):
-            logits = self.classifiers[i](pooled_output)  # (bs, num_labels)
+            logits = self.model.classifiers[i](pooled_output)  # (bs, num_labels)
             total_loss += F.cross_entropy(logits, labels[:, i])
 
         self.log("val_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
@@ -365,7 +368,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         attention_mask = batch["attention_mask"]
         labels = batch["labels"]
 
-        hidden_state = self.model(
+        hidden_state = self.model.base(
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_hidden_states=True,
@@ -375,17 +378,17 @@ class ProcurementFlagsTagger(pl.LightningModule):
             0
         ]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
-        pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
+        pooled_output = self.model.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
-        pooled_output = self.dropout(pooled_output)  # (bs, dim)
+        pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features)
             )
         total_loss = 0
         for i in range(len(self.label_columns)):
-            logits = self.classifiers[i](pooled_output)  # (bs , num_labels)
-            total_loss += F.cross_entropy(logits, labels[:, i])
+            logits = self.model.classifiers[i](pooled_output)  # (bs , num_labels)
+            total_loss += F.binary_cross_entropy_with_logits(logits, labels[:, i])
 
         self.log("test_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return total_loss
