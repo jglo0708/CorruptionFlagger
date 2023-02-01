@@ -388,7 +388,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         total_loss = 0
         for i in range(len(self.label_columns)):
             logits = self.model.classifiers[i](pooled_output)  # (bs , num_labels)
-            total_loss += F.binary_cross_entropy_with_logits(logits, labels[:, i])
+            total_loss += F.cross_entropy(logits, labels[:, i])
 
         self.log("test_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
         return total_loss
