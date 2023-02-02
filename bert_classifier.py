@@ -387,7 +387,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.log(
             "performance",
             {
-                "train_loss": total_loss,
+                "val_loss": total_loss,
                 "acc": accuracy_score,
                 "f1_score": f1_score,
                 "class_roc_auc": class_roc_auc,
@@ -446,7 +446,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.log(
             "performance",
             {
-                "train_loss": total_loss,
+                "test_loss": total_loss,
                 "acc": accuracy_score,
                 "f1_score": f1_score,
                 "class_roc_auc": class_roc_auc,
