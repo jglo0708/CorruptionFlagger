@@ -137,7 +137,8 @@ def train_model(
     """
     # make directory to same checkpoints
     if is_local_files(args.bert_architecture):
-        dir_path = os.path.join(args.checkpoint_path, "custom_fine_tuned")
+        dir_path = os.path.join(args.checkpoint_path, "_custom_fine_tuned")
+        dir_path = os.path.join(dir_path, str(args.bert_architecture).split("-")[0])
     else:
         dir_path = os.path.join(
             args.checkpoint_path, str(args.bert_architecture).split("-")[0]
@@ -194,7 +195,7 @@ def train_model(
 
     if args.run_test:
         # test on the dataset in-distribution
-        trainer.test(datamodule=data_module, ckpt_path="best")
+        trainer.test(datamodule=data_module, ckpt_path="last")
 
     if args.save_transformers_model:
         transformers_path = os.path.join(dir_path, "HF_saved")

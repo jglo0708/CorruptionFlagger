@@ -271,7 +271,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         if isinstance(self.model, DistilBertForSequenceClassification):
             pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
         elif isinstance(self.model, BertForSequenceClassification):
-            pooled_output = torch.nn.Tanh()()(pooled_output)
+            pooled_output = torch.nn.Tanh()(pooled_output)
         pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:
             pooled_output = torch.cat(pooled_output, non_text)
@@ -304,7 +304,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         if isinstance(self.bert_classifier_auto, DistilBertForSequenceClassification):
             pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
         elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
-            pooled_output = torch.nn.Tanh()()(pooled_output)
+            pooled_output = torch.nn.Tanh()(pooled_output)
         pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:  # TODO
             pooled_output = torch.cat(
@@ -362,7 +362,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         if isinstance(self.bert_classifier_auto, DistilBertForSequenceClassification):
             pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
         elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
-            pooled_output = torch.nn.Tanh()()(pooled_output)
+            pooled_output = torch.nn.Tanh()(pooled_output)
         pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
 
         if self.combine_last_layer:  # TODO
@@ -425,7 +425,10 @@ class ProcurementFlagsTagger(pl.LightningModule):
         ]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
         pooled_output = self.model.pre_classifier(pooled_output)  # (bs, dim)
-        pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
+        if isinstance(self.bert_classifier_auto, DistilBertForSequenceClassification):
+            pooled_output = torch.nn.ReLU()(pooled_output)  # (bs, dim)
+        elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
+            pooled_output = torch.nn.Tanh()(pooled_output)
         pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:
             pooled_output = torch.cat(
