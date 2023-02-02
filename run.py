@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from functions import read_and_split, process_data, run_model
+from functions import read_and_split, process_data, test_model, train_model
 from utils import calc_steps, seed_everything, get_cols
 import warnings
 
@@ -28,8 +28,18 @@ def main(args):
     )
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
-    run_model(args, total_training_steps, warmup_steps, data_module, label_columns)
-    logger.info("Fine-tuning complete!")
+    if not args.run_test:
+        learning_rates = [1e-4, 1e-5, 1e-6, 1e-7]
+        for lr in learning_rates:
+            train_model(
+                args, lr, total_training_steps, warmup_steps, data_module, label_columns
+            )
+        logger.info("Fine-tuning complete!")
+    else:
+        test_model(data_module)
+        logger.info("Testing complete!")
+    if args.predict:
+        predictions = predict(data_module)
 
 
 if __name__ == "__main__":
@@ -109,12 +119,7 @@ if __name__ == "__main__":
         default="data_utils/numericals.txt",
         help="Dir path to numerical columns file",
     )
-    parser.add_argument(
-        "--num_cat_to_text",
-        type=bool,
-        default=False,
-        help="Whether we combine the numerical and categorical&numerical features with text ",
-    )
+
     parser.add_argument(
         "--combine_last_layer",
         type=bool,

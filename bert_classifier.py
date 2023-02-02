@@ -66,29 +66,18 @@ class ProcurementNoticeDataset(Dataset):
 
     def __getitem__(self, index: int):
         data_row = self.df.iloc[index]
-        notice_text = data_row[self.text_columns].values.tolist()
+        text = data_row[self.text_columns].values.tolist()
         if (len(self.categorical_columns) == 0) & (len(self.categorical_columns) == 0):
             categorical_features = torch.empty(1)
             numerical_features = torch.empty(1)
         else:
-            categorical_features = torch.tensor(
-                data_row[self.categorical_columns].values
-            )
-            numerical_features = torch.tensor(data_row[self.numerical_columns].values)
-        if self.num_cat_to_text:
+            categorical_features = torch.tensor(data_row[self.categorical_columns])
+            numerical_features = torch.tensor(data_row[self.numerical_columns])
 
-            # Concatenate text, numerical and categorical data SET TO STR TODO
-            non_text_cols = data_row[
-                self.categorical_columns + self.numerical_columns
-            ].apply(", ".join, axis=1)
-            non_text_cols_vals = non_text_cols.values.tolist()
-            input_data = ", ".join([notice_text, non_text_cols_vals])
-        else:
-            input_data = notice_text
         labels = torch.tensor(data_row[self.label_columns].astype(int).values)
 
         encoding = self.tokenizer.encode_plus(
-            input_data[0],
+            text[0],
             add_special_tokens=True,
             max_length=self.max_token_len,
             return_token_type_ids=False,
@@ -97,23 +86,14 @@ class ProcurementNoticeDataset(Dataset):
             return_attention_mask=True,
             return_tensors="pt",
         )
-        if self.num_cat_to_text:
-
-            return dict(
-                input_data=input_data,
-                input_ids=encoding["input_ids"].flatten(),
-                attention_mask=encoding["attention_mask"].flatten(),
-                labels=labels,
-            )
-        else:
-            return dict(
-                input_data=input_data,
-                categorical_features=categorical_features,
-                numerical_features=numerical_features,
-                input_ids=encoding["input_ids"].flatten(),
-                attention_mask=encoding["attention_mask"].flatten(),
-                labels=labels,
-            )
+        return dict(
+            input_data=text[0],
+            categorical_features=categorical_features,
+            numerical_features=numerical_features,
+            input_ids=encoding["input_ids"].flatten(),
+            attention_mask=encoding["attention_mask"].flatten(),
+            labels=labels,
+        )
 
 
 class ProcurementNoticeDataModule(pl.LightningDataModule):
@@ -129,7 +109,6 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         categorical_columns: list = None,
         numerical_columns: list = None,
         label_columns: list = ["label_encoded"],
-        num_cat_to_text: bool = False,
     ):
         super().__init__()
         self.test_dataset = None
@@ -145,7 +124,6 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
         self.numerical_columns = numerical_columns
         self.categorical_columns = categorical_columns
         self.text_columns = text_columns
-        self.num_cat_to_text = num_cat_to_text
 
     def setup(self, stage=None):
         self.train_dataset = ProcurementNoticeDataset(
@@ -156,7 +134,6 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
             categorical_columns=self.categorical_columns,
             numerical_columns=self.numerical_columns,
             label_columns=self.label_columns,
-            num_cat_to_text=self.num_cat_to_text,
         )
 
         self.val_dataset = ProcurementNoticeDataset(
@@ -167,7 +144,6 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
             categorical_columns=self.categorical_columns,
             numerical_columns=self.numerical_columns,
             label_columns=self.label_columns,
-            num_cat_to_text=self.num_cat_to_text,
         )
 
         self.test_dataset = ProcurementNoticeDataset(
@@ -178,7 +154,6 @@ class ProcurementNoticeDataModule(pl.LightningDataModule):
             categorical_columns=self.categorical_columns,
             numerical_columns=self.numerical_columns,
             label_columns=self.label_columns,
-            num_cat_to_text=self.num_cat_to_text,
         )
 
     def train_dataloader(self):
@@ -214,8 +189,10 @@ class ProcurementFlagsTagger(pl.LightningModule):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 bert_architecture, local_files_only=True
             )
-            self.bert_classifier_auto = AutoModelForSequenceClassification.from_pretrained(
-                bert_architecture, local_files_only=True
+            self.bert_classifier_auto = (
+                AutoModelForSequenceClassification.from_pretrained(
+                    bert_architecture, local_files_only=True
+                )
             )
 
         else:
@@ -234,7 +211,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
             pass
         if self.combine_last_layer:
             self.bert_classifier_auto.classifier.in_features = (
-                self.bert.config.hidden_size + len(non_text_cols)
+                self.bert_classifier_auto.config.hidden_size + len(non_text_cols)
             )
         self.model.classifiers = [
             self.bert_classifier_auto.classifier for i in range(len(label_columns))
@@ -243,6 +220,27 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.model.dropout = self.bert_classifier_auto.dropout
 
         self.combine_last_layer = combine_last_layer
+
+        if self.is_multilabel():
+            self.auroc = AUROC(
+                task="multilabel",
+                num_labels=len(self.label_columns),
+                average="weighted",
+            )
+            self.accuracy = Accuracy(
+                task="multilabel",
+                num_labels=len(self.label_columns),
+                average="weighted",
+            )
+            self.f1 = F1Score(
+                task="multilabel",
+                num_labels=len(self.label_columns),
+                average="weighted",
+            )
+        else:
+            self.auroc = AUROC(task="binary")
+            self.accuracy = Accuracy(task="binary")
+            self.f1 = F1Score(task="binary")
 
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
@@ -312,6 +310,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features)
             )
+        print(pooled_output.size())
         result_preds = []
         total_loss = 0
         for i in range(len(self.label_columns)):
@@ -322,8 +321,24 @@ class ProcurementFlagsTagger(pl.LightningModule):
             result_preds.append(preds)
 
         predictions = torch.cat(result_preds, dim=-1)
+        predictions_r = predictions.reshape(labels.size())
+        class_roc_auc = self.auroc(predictions_r, labels)
+        accuracy_score = self.accuracy(predictions_r, labels)
+        f1_score = self.f1(predictions_r, labels)
 
-        self.log("train_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
+        self.log(
+            "performance",
+            {
+                "train_loss": total_loss,
+                "acc": accuracy_score,
+                "f1_score": f1_score,
+                "class_roc_auc": class_roc_auc,
+            },
+            prog_bar=True,
+            on_epoch=True,
+            logger=True,
+            sync_dist=True,
+        )
         return {"loss": total_loss, "predictions": predictions, "labels": labels}
 
     def validation_step(self, batch, batch_idx):
@@ -353,13 +368,42 @@ class ProcurementFlagsTagger(pl.LightningModule):
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features)
             )
+        result_preds = []
         total_loss = 0
         for i in range(len(self.label_columns)):
             logits = self.model.classifiers[i](pooled_output)  # (bs, num_labels)
+            preds = torch.sigmoid(torch.argmax(logits, 1))
+            target = labels[:, i].unsqueeze(1)
             total_loss += F.cross_entropy(logits, labels[:, i])
+            result_preds.append(preds)
 
-        self.log("val_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
+        predictions = torch.cat(result_preds, dim=-1).reshape(labels.size())
+        class_roc_auc = self.auroc(predictions, labels)
+        accuracy_score = self.accuracy(predictions, labels)
+        f1_score = self.f1(predictions, labels)
+
+        self.log(
+            "performance",
+            {
+                "train_loss": total_loss,
+                "acc": accuracy_score,
+                "f1_score": f1_score,
+                "class_roc_auc": class_roc_auc,
+            },
+            prog_bar=True,
+            logger=True,
+            on_epoch=True,
+            sync_dist=True,
+        )
+
         return total_loss
+
+    def predict_step(
+        self,
+        batch,
+        batch_idx,
+    ):
+        return self(batch)
 
     def test_step(self, batch, batch_idx):
         input_ids = batch["input_ids"]
@@ -385,16 +429,39 @@ class ProcurementFlagsTagger(pl.LightningModule):
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features)
             )
+        result_preds = []
         total_loss = 0
         for i in range(len(self.label_columns)):
-            logits = self.model.classifiers[i](pooled_output)  # (bs , num_labels)
+            logits = self.model.classifiers[i](pooled_output)  # (bs, num_labels)
+            preds = torch.sigmoid(torch.argmax(logits, 1))
+            target = labels[:, i].unsqueeze(1)
             total_loss += F.cross_entropy(logits, labels[:, i])
+            result_preds.append(preds)
 
-        self.log("test_loss", total_loss, prog_bar=True, logger=True, sync_dist=True)
+        predictions = torch.stack(torch.cat(result_preds, dim=-1)).reshape(
+            labels.size()
+        )
+        class_roc_auc = self.auroc(predictions, labels)
+        accuracy_score = self.accuracy(predictions, labels)
+        f1_score = self.f1(predictions, labels)
+
+        self.log(
+            "performance",
+            {
+                "train_loss": total_loss,
+                "acc": accuracy_score,
+                "f1_score": f1_score,
+                "class_roc_auc": class_roc_auc,
+            },
+            prog_bar=True,
+            logger=True,
+            sync_dist=True,
+        )
+
         return total_loss
 
     def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+        total_loss = torch.stack([x["loss"] for x in outputs]).sum()
 
         labels = []
         predictions = []
@@ -407,33 +474,10 @@ class ProcurementFlagsTagger(pl.LightningModule):
                 out_predictions = out_predictions.detach().cpu()
                 predictions.append(out_predictions)
 
-        labels = torch.stack(labels).int()
         predictions = torch.stack(predictions).reshape(labels.size())
-
-        if self.is_multilabel():
-            auroc = AUROC(
-                task="multilabel",
-                num_labels=len(self.label_columns),
-                average="weighted",
-            )
-            accuracy = Accuracy(
-                task="multilabel",
-                num_labels=len(self.label_columns),
-                average="weighted",
-            )
-            f1 = F1Score(
-                task="multilabel",
-                num_labels=len(self.label_columns),
-                average="weighted",
-            )
-        else:
-            auroc = AUROC(task="binary")
-            accuracy = Accuracy(task="binary")
-            f1 = F1Score(task="binary")
-
-        class_roc_auc = auroc(predictions, labels)
-        accuracy_score = accuracy(predictions, labels)
-        f1_score = f1(predictions, labels)
+        class_roc_auc = self.auroc(predictions, labels)
+        accuracy_score = self.accuracy(predictions, labels)
+        f1_score = self.f1(predictions, labels)
 
         self.logger.experiment.add_scalar(
             f"ROC/Train", class_roc_auc, self.current_epoch
@@ -441,18 +485,18 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.logger.experiment.add_scalar(
             f"Accuracy/Train", accuracy_score, self.current_epoch
         )
-        self.logger.experiment.add_scalar(f"Loss/Train", avg_loss, self.current_epoch)
+        self.logger.experiment.add_scalar(f"Loss/Train", total_loss, self.current_epoch)
         self.logger.experiment.add_scalar(f"F1/Train", f1_score, self.current_epoch)
 
     def validation_epoch_end(self, val_outputs):
 
-        avg_loss = torch.stack([x for x in val_outputs]).mean()
-        self.logger.experiment.add_scalar(f"Loss/Val", avg_loss, self.current_epoch)
+        total_loss = torch.stack([x for x in val_outputs]).sum()
+        self.logger.experiment.add_scalar(f"Loss/Val", total_loss, self.current_epoch)
 
     def test_epoch_end(self, test_outputs):
 
-        avg_loss = torch.stack([x for x in test_outputs]).mean()
-        self.logger.experiment.add_scalar(f"Loss/Val", avg_loss, self.current_epoch)
+        total_loss = torch.stack([x for x in test_outputs]).sum()
+        self.logger.experiment.add_scalar(f"Loss/Test", total_loss, self.current_epoch)
 
     def configure_optimizers(self):
 

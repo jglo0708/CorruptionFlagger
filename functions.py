@@ -118,15 +118,17 @@ def process_data(
         numerical_columns=numerical_columns,
         categorical_columns=categorical_columns,
         label_columns=label_columns,
-        num_cat_to_text=args.num_cat_to_text,
     )
 
     return data_module
 
 
-def run_model(args, warmup_steps, total_training_steps, data_module, labels):
+def train_model(
+    args, learning_rate, warmup_steps, total_training_steps, data_module, labels
+):
     """
 
+    :param labels: label columns given as a list
     :param args: command-line arguments
     :param warmup_steps: number of warmup steps
     :param total_training_steps: calculated total training steps
@@ -145,7 +147,7 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
         bert_architecture=args.bert_architecture,
-        learning_rate=args.learning_rate,
+        learning_rate=learning_rate,
         label_columns=labels,
         combine_last_layer=args.combine_last_layer,
         non_text_cols=data_module.numerical_columns + data_module.categorical_columns,
@@ -156,7 +158,7 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
         save_last=True,
         save_top_k=1,
         verbose=True,
-        filename="PL--{epoch}-{val_loss:.3f}-{train_loss:.3f}",
+        filename="PL--{epoch}-{val_loss:.2f}-{f1_score:.2f}",
         monitor="val_loss",
         mode="min",
     )
@@ -205,3 +207,14 @@ def run_model(args, warmup_steps, total_training_steps, data_module, labels):
         )
         best_model.get_backbone().save_pretrained(transformers_path)
         best_model.tokenizer.save_pretrained(transformers_path)
+
+
+def test_model(data_module):
+    trainer = pl.Trainer(accelerator="gpu")
+
+    trainer.test(datamodule=data_module, ckpt_path="best")
+
+
+def predict(data_loader):
+    trainer = pl.Trainer(accelerator="gpu")
+    predictions = trainer.predict(model, data_loader)
