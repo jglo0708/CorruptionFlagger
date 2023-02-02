@@ -151,7 +151,8 @@ def train_model(
         learning_rate=learning_rate,
         label_columns=labels,
         combine_last_layer=args.combine_last_layer,
-        non_text_cols=data_module.numerical_columns + data_module.categorical_columns,
+        non_text_cols=data_module.numerical_columns
+        + data_module.train_df[data_module.categorical_columns].columns.tolist(),
     )
 
     checkpoint_callback = ModelCheckpoint(

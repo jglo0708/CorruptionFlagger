@@ -12,6 +12,7 @@ from torch.nn import functional as F
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
+
 from torchmetrics import AUROC, Accuracy, F1Score
 from transformers import (
     AdamW,
@@ -213,6 +214,16 @@ class ProcurementFlagsTagger(pl.LightningModule):
             self.bert_classifier_auto.classifier.in_features = (
                 self.bert_classifier_auto.config.hidden_size + len(non_text_cols)
             )
+            self.bert_classifier_auto.classifier.weight = torch.nn.Parameter(
+                torch.cat(
+                    (
+                        self.bert_classifier_auto.classifier.weight,
+                        torch.randn(2, len(non_text_cols)),
+                    ),
+                    1,
+                )
+            )
+
         self.model.classifiers = [
             self.bert_classifier_auto.classifier for i in range(len(label_columns))
         ]
@@ -308,8 +319,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
         pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:  # TODO
             pooled_output = torch.cat(
-                (pooled_output, numerical_features, categorical_features)
+                (pooled_output, numerical_features, categorical_features), dim=-1
             )
+            pooled_output = pooled_output.type(torch.float32)
 
         result_preds = []
         total_loss = 0
@@ -369,9 +381,10 @@ class ProcurementFlagsTagger(pl.LightningModule):
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features), dim=-1
             )
-
+            pooled_output = pooled_output.type(torch.float32)
         result_preds = []
         total_loss = 0
+
         for i in range(len(self.label_columns)):
             logits = self.model.classifiers[i](pooled_output)  # (bs, num_labels)
             preds = torch.sigmoid(torch.argmax(logits, 1))
@@ -432,8 +445,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
         pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
         if self.combine_last_layer:
             pooled_output = torch.cat(
-                (pooled_output, numerical_features, categorical_features)
+                (pooled_output, numerical_features, categorical_features), dim=-1
             )
+            pooled_output = pooled_output.type(torch.float32)
         result_preds = []
         total_loss = 0
         for i in range(len(self.label_columns)):
