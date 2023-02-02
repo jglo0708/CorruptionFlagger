@@ -310,7 +310,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
             pooled_output = torch.cat(
                 (pooled_output, numerical_features, categorical_features)
             )
-        print(pooled_output.size())
+
         result_preds = []
         total_loss = 0
         for i in range(len(self.label_columns)):
@@ -364,10 +364,12 @@ class ProcurementFlagsTagger(pl.LightningModule):
         elif isinstance(self.bert_classifier_auto, BertForSequenceClassification):
             pooled_output = torch.nn.Tanh()()(pooled_output)
         pooled_output = self.model.dropout(pooled_output)  # (bs, dim)
+
         if self.combine_last_layer:  # TODO
             pooled_output = torch.cat(
-                (pooled_output, numerical_features, categorical_features)
+                (pooled_output, numerical_features, categorical_features), dim=-1
             )
+
         result_preds = []
         total_loss = 0
         for i in range(len(self.label_columns)):
@@ -398,11 +400,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
         return total_loss
 
-    def predict_step(
-        self,
-        batch,
-        batch_idx,
-    ):
+    def predict_step(self, batch, batch_idx, **kwargs):
         return self(batch)
 
     def test_step(self, batch, batch_idx):
@@ -476,9 +474,9 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
         labels = torch.stack(labels).int()
         predictions = torch.stack(predictions).reshape(labels.size())
-        class_roc_auc = self.auroc(predictions, labels)
-        accuracy_score = self.accuracy(predictions, labels)
-        f1_score = self.f1(predictions, labels)
+        class_roc_auc = self.auroc(predictions, labels).to("cpu")
+        accuracy_score = self.accuracy(predictions, labels).to("cpu")
+        f1_score = self.f1(predictions, labels).to("cpu")
 
         self.logger.experiment.add_scalar(
             f"ROC/Train", class_roc_auc, self.current_epoch
