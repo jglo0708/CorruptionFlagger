@@ -212,7 +212,7 @@ def train_model(
 def test_model(data_module):
     trainer = pl.Trainer(accelerator="gpu")
 
-    trainer.test(datamodule=data_module, ckpt_path="best")
+    trainer.test(datamodule=data_module, ckpt_path=args.checkpoint_path)
 
 
 def predict(data_loader):

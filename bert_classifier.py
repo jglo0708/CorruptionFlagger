@@ -474,6 +474,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
                 out_predictions = out_predictions.detach().cpu()
                 predictions.append(out_predictions)
 
+        labels = torch.stack(labels).int()
         predictions = torch.stack(predictions).reshape(labels.size())
         class_roc_auc = self.auroc(predictions, labels)
         accuracy_score = self.accuracy(predictions, labels)

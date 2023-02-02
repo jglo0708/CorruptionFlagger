@@ -76,7 +76,7 @@ if __name__ == "__main__":
         "--checkpoint_path",
         default="checkpoints",
         type=str,
-        help="path to save model checkpoints",
+        help="path to save model checkpoints. in case you are using test mode, please specify directly the checkpoint to use",
     )
     parser.add_argument(
         "--batch_size",
