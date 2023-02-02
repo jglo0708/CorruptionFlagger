@@ -172,7 +172,7 @@ def train_model(
             "model": args.bert_architecture,
         }
     )
-    early_stopping_callback = EarlyStopping(monitor='performance_epoch.val_loss', patience=2)
+    early_stopping_callback = EarlyStopping(monitor="performance_epoch['val_loss']", patience=2)
     if args.resume_from_checkpoint is not None:
         trainer = pl.Trainer(
             logger=logger,
