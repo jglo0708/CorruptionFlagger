@@ -440,9 +440,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
             total_loss += F.cross_entropy(logits, labels[:, i])
             result_preds.append(preds)
 
-        predictions = torch.stack(torch.cat(result_preds, dim=-1)).reshape(
-            labels.size()
-        )
+        predictions = torch.cat(result_preds, dim=-1).reshape(labels.size())
         class_roc_auc = self.auroc(predictions, labels)
         accuracy_score = self.accuracy(predictions, labels)
         f1_score = self.f1(predictions, labels)
