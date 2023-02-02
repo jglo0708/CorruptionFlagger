@@ -68,12 +68,9 @@ class ProcurementNoticeDataset(Dataset):
     def __getitem__(self, index: int):
         data_row = self.df.iloc[index]
         text = data_row[self.text_columns].values.tolist()
-        if (len(self.categorical_columns) == 0) & (len(self.categorical_columns) == 0):
-            categorical_features = torch.empty(1)
-            numerical_features = torch.empty(1)
-        else:
-            categorical_features = torch.tensor(data_row[self.categorical_columns])
-            numerical_features = torch.tensor(data_row[self.numerical_columns])
+
+        categorical_features = torch.tensor(data_row[self.categorical_columns])
+        numerical_features = torch.tensor(data_row[self.numerical_columns])
 
         labels = torch.tensor(data_row[self.label_columns].astype(int).values)
 
