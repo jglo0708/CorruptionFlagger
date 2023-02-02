@@ -466,17 +466,17 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
         for output in outputs:
             for out_labels in output["labels"]:
-                out_labels = out_labels.detach().cpu()
+                out_labels = out_labels.detach()
                 labels.append(out_labels)
             for out_predictions in output["predictions"]:
-                out_predictions = out_predictions.detach().cpu()
+                out_predictions = out_predictions.detach()
                 predictions.append(out_predictions)
 
         labels = torch.stack(labels).int()
         predictions = torch.stack(predictions).reshape(labels.size())
-        class_roc_auc = self.auroc(predictions, labels).to("cpu")
-        accuracy_score = self.accuracy(predictions, labels).to("cpu")
-        f1_score = self.f1(predictions, labels).to("cpu")
+        class_roc_auc = self.auroc(predictions, labels)
+        accuracy_score = self.accuracy(predictions, labels)
+        f1_score = self.f1(predictions, labels)
 
         self.logger.experiment.add_scalar(
             f"ROC/Train", class_roc_auc, self.current_epoch

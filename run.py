@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from functions import read_and_split, process_data, test_model, train_model
+from functions import read_and_split, process_data, test_model, train_model, predict
 from utils import calc_steps, seed_everything, get_cols
 import warnings
 
