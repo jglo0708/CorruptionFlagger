@@ -28,18 +28,14 @@ def main(args):
     )
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
-    if not args.run_test:
-        learning_rates = [1e-4, 1e-5, 1e-6, 1e-7]
-        for lr in learning_rates:
-            train_model(
-                args, lr, total_training_steps, warmup_steps, data_module, label_columns
-            )
-        logger.info("Fine-tuning complete!")
-    else:
-        test_model(data_module)
-        logger.info("Testing complete!")
-    if args.predict:
-        predictions = predict(data_module)
+
+    learning_rates = [1e-4, 1e-5, 1e-6, 1e-7]
+    for lr in learning_rates:
+        train_model(
+            args, lr, total_training_steps, warmup_steps, data_module, label_columns
+        )
+    logger.info("Fine-tuning complete!")
+
 
 
 if __name__ == "__main__":

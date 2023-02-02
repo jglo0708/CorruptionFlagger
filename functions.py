@@ -158,7 +158,7 @@ def train_model(
         save_last=True,
         save_top_k=1,
         verbose=True,
-        filename="PL--{epoch}-{val_loss:.2f}-{f1_score:.2f}",
+        filename="PL--{epoch}-{val_loss:.2f}",
         monitor="val_loss",
         mode="min",
     )
