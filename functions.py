@@ -209,12 +209,12 @@ def train_model(
         best_model.tokenizer.save_pretrained(transformers_path)
 
 
-def test_model(data_module):
-    trainer = pl.Trainer(accelerator="gpu")
+# def test_model(data_module):
+#     trainer = pl.Trainer(accelerator="gpu")
+#
+#     trainer.test(datamodule=data_module, ckpt_path=args.checkpoint_path)
 
-    trainer.test(datamodule=data_module, ckpt_path=args.checkpoint_path)
 
-
-def predict(data_loader):
-    trainer = pl.Trainer(accelerator="gpu")
-    predictions = trainer.predict(model, data_loader)
+# def predict(data_loader):
+#     trainer = pl.Trainer(accelerator="gpu")
+#     predictions = trainer.predict(model, data_loader)
