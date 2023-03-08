@@ -6,16 +6,6 @@ Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
 """
-import math
-
-import torch
-import pytorch_lightning as pl
-from filelock import FileLock
-from torch.utils.data import DataLoader, random_split
-from torch.nn import functional as F
-from torchvision.datasets import MNIST
-from torchvision import transforms
-import os
 
 import os
 from torch.nn import functional as F
