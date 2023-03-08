@@ -239,7 +239,7 @@ def tune_corrflagger_asha(
         "learning_rate": tune.loguniform(1e-4, 1e-1),
         "weight_decay": tune.uniform(0, 0.1),
         "combine_last_layer": tune.choice([True, False]),
-        "batch_size": 16,
+        "batch_size": tune.choice(8, 16)
     }
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
