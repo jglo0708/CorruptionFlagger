@@ -5,6 +5,15 @@ Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
 """
+from pytorch_lightning.loggers import TensorBoardLogger
+from ray import air, tune
+from ray.air import session
+from ray.tune import CLIReporter
+from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+from ray.tune.integration.pytorch_lightning import (
+    TuneReportCallback,
+    TuneReportCheckpointCallback,
+)
 
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -123,11 +132,19 @@ def process_data(
     return data_module
 
 
-def train_model(
-    args, learning_rate, warmup_steps, total_training_steps, data_module, labels
-):
+def make_dir_path(bert_architecture, checkpoint_path):
+    if is_local_files(bert_architecture):
+        dir_path = os.path.join(checkpoint_path, "_custom_fine_tuned")
+        dir_path = os.path.join(dir_path, str(bert_architecture).split("-")[0])
+    else:
+        dir_path = os.path.join(checkpoint_path, str(bert_architecture).split("-")[0])
+    return dir_path
+
+
+def train_model(config, args, warmup_steps, total_training_steps, data_module, labels):
     """
 
+    :param config:
     :param labels: label columns given as a list
     :param args: command-line arguments
     :param warmup_steps: number of warmup steps
@@ -136,21 +153,16 @@ def train_model(
     :return: None
     """
     # make directory to same checkpoints
-    if is_local_files(args.bert_architecture):
-        dir_path = os.path.join(args.checkpoint_path, "_custom_fine_tuned")
-        dir_path = os.path.join(dir_path, str(args.bert_architecture).split("-")[0])
-    else:
-        dir_path = os.path.join(
-            args.checkpoint_path, str(args.bert_architecture).split("-")[0]
-        )
+    dir_path = make_dir_path(args.bert_architecture, args.checkpoint_path)
     os.makedirs(dir_path, exist_ok=True)
     model = ProcurementFlagsTagger(
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
         bert_architecture=args.bert_architecture,
-        learning_rate=learning_rate,
+        learning_rate=config['learning_rate'],
+        weight_decay=config['weight_decay'],
         label_columns=labels,
-        combine_last_layer=args.combine_last_layer,
+        combine_last_layer=config['combine_last_layer'],
         non_text_cols=data_module.numerical_columns
         + data_module.train_df[data_module.categorical_columns].columns.tolist(),
     )
@@ -170,15 +182,19 @@ def train_model(
     logger.log_hyperparams(
         {
             "epochs": args.n_epochs,
-            "learning_rate": args.learning_rate,
             "model": args.bert_architecture,
         }
     )
-    early_stopping_callback = EarlyStopping(monitor="val_loss", patience=2)
+    tune_report_callback = TuneReportCallback(
+        {"loss": "val_loss", "f1_score": "performance/f1_score"}, on="validation_end"
+    )
+
+    callbacks = [checkpoint_callback, tune_report_callback]
+
     if args.resume_from_checkpoint is not None:
         trainer = pl.Trainer(
             logger=logger,
-            callbacks=[early_stopping_callback, checkpoint_callback],
+            callbacks=callbacks,
             max_epochs=args.n_epochs,
             resume_from_checkpoint=args.resume_from_checkpoint,
             accelerator="gpu",
@@ -187,36 +203,76 @@ def train_model(
     else:
         trainer = pl.Trainer(
             logger=logger,
-            callbacks=[early_stopping_callback, checkpoint_callback],
+            callbacks=callbacks,
             max_epochs=args.n_epochs,
             accelerator="gpu",
-            # strategy='dp',
         )
     trainer.fit(model, data_module)
 
-    if args.run_test:
-        # test on the dataset in-distribution
-        trainer.test(datamodule=data_module, ckpt_path="last")
+    # if args.run_test:
+    #     # test on the dataset in-distribution
+    #     trainer.test(datamodule=data_module, ckpt_path="last")
 
-    if args.save_transformers_model:
-        transformers_path = os.path.join(dir_path, "HF_saved")
-        os.makedirs(transformers_path, exist_ok=True)
-        #  Save the tokenizer and the backbone LM with HuggingFace's serialization.
-        #  To avoid mixing PL's and HuggingFace's serialization:
-        #  https://github.com/PyTorchLightning/pytorch-lightning/issues/3096#issuecomment-686877242
-        best_model = ProcurementFlagsTagger.load_from_checkpoint(
-            checkpoint_callback.best_model_path
-        )
-        best_model.get_backbone().save_pretrained(transformers_path)
-        best_model.tokenizer.save_pretrained(transformers_path)
-
-
-# def test_model(data_module):
-#     trainer = pl.Trainer(accelerator="gpu")
-#
-#     trainer.test(datamodule=data_module, ckpt_path=args.checkpoint_path)
+    # if args.save_transformers_model:
+    #     transformers_path = os.path.join(dir_path, "HF_saved")
+    #     os.makedirs(transformers_path, exist_ok=True)
+    #     #  Save the tokenizer and the backbone LM with HuggingFace's serialization.
+    #     #  To avoid mixing PL's and HuggingFace's serialization:
+    #     #  https://github.com/PyTorchLightning/pytorch-lightning/issues/3096#issuecomment-686877242
+    #     best_model = ProcurementFlagsTagger.load_from_checkpoint(
+    #         checkpoint_callback.best_model_path
+    #     )
+    #     best_model.get_backbone().save_pretrained(transformers_path)
+    #     best_model.tokenizer.save_pretrained(transformers_path)
 
 
-# def predict(data_loader):
-#     trainer = pl.Trainer(accelerator="gpu")
-#     predictions = trainer.predict(model, data_loader)
+def tune_corrflagger_asha(
+    args,
+    warmup_steps,
+    total_training_steps,
+    data_module,
+    labels,
+    num_epochs=10,
+    gpus_per_trial=1,
+):
+    config = {
+        "learning_rate": tune.loguniform(1e-4, 1e-1),
+        "weight_decay": tune.uniform(0, 0.1),
+        "combine_last_layer": tune.choice([True, False]),
+        "batch_size": 16,
+    }
+    scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
+
+    reporter = CLIReporter(
+        parameter_columns=["batch_size", "combine_last_layer", "learning_rate", "weight_decay"],
+        metric_columns=["loss", "f1_score", "training_iteration"],
+    )
+
+    train_fn_with_parameters = tune.with_parameters(
+        train_model,
+        args=args,
+        warmup_steps=warmup_steps,
+        total_training_steps=total_training_steps,
+        data_module=data_module,
+        labels=labels,
+    )
+    resources_per_trial = {"cpu": 1, "gpu": gpus_per_trial}
+
+    tuner = tune.Tuner(
+        tune.with_resources(train_fn_with_parameters, resources=resources_per_trial),
+        tune_config=tune.TuneConfig(
+            metric="loss",
+            mode="min",
+            scheduler=scheduler,
+            # num_samples=num_samples,
+        ),
+        run_config=air.RunConfig(
+            name="tune_corrflagger_asha",
+            progress_reporter=reporter,
+        ),
+        param_space=config,
+    )
+    results = tuner.fit()
+
+    print("Best hyperparameters found were: ", results.get_best_result().config)
+

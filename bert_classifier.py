@@ -6,6 +6,16 @@ Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
 """
+import math
+
+import torch
+import pytorch_lightning as pl
+from filelock import FileLock
+from torch.utils.data import DataLoader, random_split
+from torch.nn import functional as F
+from torchvision.datasets import MNIST
+from torchvision import transforms
+import os
 
 import os
 from torch.nn import functional as F
@@ -172,6 +182,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         label_columns: list,
         bert_architecture: str,
         learning_rate: float,
+        weight_decay: float,
         n_training_steps=None,
         n_warmup_steps=None,
         non_text_cols=None,
@@ -253,6 +264,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         self.n_training_steps = n_training_steps
         self.n_warmup_steps = n_warmup_steps
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
 
     def is_multilabel(self):
         if len(self.label_columns) > 1:
@@ -515,7 +527,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
 
     def configure_optimizers(self):
 
-        optimizer = AdamW(self.parameters(), lr=self.learning_rate)
+        optimizer = AdamW(self.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
 
         scheduler = get_linear_schedule_with_warmup(
             optimizer,

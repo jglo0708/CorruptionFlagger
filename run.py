@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from functions import read_and_split, process_data, train_model
+from functions import read_and_split, process_data, train_model, tune_corrflagger_asha
 from utils import calc_steps, seed_everything, get_cols
 import warnings
 
@@ -28,12 +28,9 @@ def main(args):
     )
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
-
-    learning_rates = [1e-4, 1e-5, 1e-6, 1e-7]
-    for lr in learning_rates:
-        train_model(
-            args, lr, total_training_steps, warmup_steps, data_module, label_columns
-        )
+    tune_corrflagger_asha(
+        args, total_training_steps, warmup_steps, data_module, label_columns
+    )
     logger.info("Fine-tuning complete!")
 
 
