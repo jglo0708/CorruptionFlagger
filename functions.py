@@ -269,6 +269,7 @@ def tune_corrflagger_asha(
         run_config=air.RunConfig(
             name="tune_corrflagger_asha",
             progress_reporter=reporter,
+            local_dir = '/home/student/jglobisz/CorruptionFlagger'
         ),
         param_space=config,
     )
