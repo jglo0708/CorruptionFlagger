@@ -17,6 +17,7 @@ from ray.tune.integration.pytorch_lightning import (
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 import pytorch_lightning as pl
+from ray.tune.search.optuna import OptunaSearch
 
 from sklearn.model_selection import train_test_split
 import pathlib
@@ -240,7 +241,7 @@ def tune_corrflagger_asha(
         "combine_last_layer": tune.choice([True, False]),
         # "batch_size": tune.choice([8, 16])
     }
-    scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
+    # scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
         parameter_columns=["combine_last_layer", "learning_rate", "weight_decay"],
@@ -262,7 +263,8 @@ def tune_corrflagger_asha(
         tune_config=tune.TuneConfig(
             metric="loss",
             mode="min",
-            scheduler=scheduler,
+            search_alg=OptunaSearch(),
+            # scheduler=scheduler,
             # num_samples=num_samples,
         ),
         run_config=air.RunConfig(
