@@ -152,7 +152,7 @@ def train_model(config, args, warmup_steps, total_training_steps, data_module, l
     :return: None
     """
     # make directory to same checkpoints
-    # dir_path = make_dir_path(args.bert_architecture, args.checkpoint_path)
+    dir_path = make_dir_path(args.bert_architecture, args.checkpoint_path)
     # os.makedirs(dir_path, exist_ok=True)
     model = ProcurementFlagsTagger(
         n_warmup_steps=warmup_steps,
