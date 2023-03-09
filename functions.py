@@ -241,7 +241,7 @@ def tune_corrflagger_asha(
         "combine_last_layer": tune.choice([True, False]),
         # "batch_size": tune.choice([8, 16])
     }
-    # scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
+    scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
         parameter_columns=["combine_last_layer", "learning_rate", "weight_decay"],
@@ -264,7 +264,7 @@ def tune_corrflagger_asha(
             metric="loss",
             mode="min",
             search_alg=OptunaSearch(),
-            # scheduler=scheduler,
+            scheduler=scheduler,
             num_samples=100,
         ),
         run_config=air.RunConfig(
