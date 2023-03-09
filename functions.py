@@ -185,7 +185,7 @@ def train_model(config, args, warmup_steps, total_training_steps, data_module, l
         }
     )
     tune_report_callback = TuneReportCallback(
-        {"loss": "val_loss", "f1_score": "performance/f1_score"}, on="validation_end"
+        {"loss": "val_loss"}, on="validation_end"
     )
 
     callbacks = [checkpoint_callback, tune_report_callback]
