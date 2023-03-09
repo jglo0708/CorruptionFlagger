@@ -152,8 +152,8 @@ def train_model(config, args, warmup_steps, total_training_steps, data_module, l
     :return: None
     """
     # make directory to same checkpoints
-    dir_path = make_dir_path(args.bert_architecture, args.checkpoint_path)
-    os.makedirs(dir_path, exist_ok=True)
+    # dir_path = make_dir_path(args.bert_architecture, args.checkpoint_path)
+    # os.makedirs(dir_path, exist_ok=True)
     model = ProcurementFlagsTagger(
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
@@ -243,7 +243,7 @@ def tune_corrflagger_asha(
     scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
 
     reporter = CLIReporter(
-        parameter_columns=["batch_size", "combine_last_layer", "learning_rate", "weight_decay"],
+        parameter_columns=["combine_last_layer", "learning_rate", "weight_decay"],
         metric_columns=["loss", "f1_score", "training_iteration"],
     )
 
