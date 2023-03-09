@@ -264,7 +264,7 @@ def tune_corrflagger_asha(
             metric="loss",
             mode="min",
             search_alg=OptunaSearch(),
-            scheduler=scheduler,
+            # scheduler=scheduler,
             num_samples=100,
         ),
         run_config=air.RunConfig(
