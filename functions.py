@@ -5,7 +5,7 @@ Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
 """
-
+import numpy as np
 from ray import air, tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
@@ -236,7 +236,6 @@ def tune_corrflagger_asha(
         "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
         "weight_decay": tune.uniform(0, 0.1),
         "combine_last_layer": tune.choice([True, False]),
-        # "batch_size": tune.choice([8, 16])
     }
     scheduler = ASHAScheduler(
         max_t=num_epochs,
