@@ -239,8 +239,6 @@ def tune_corrflagger_asha(
     }
     scheduler = ASHAScheduler(
         max_t=num_epochs,
-        metric="f1_score",
-        mode="max",
     )
 
     reporter = CLIReporter(
