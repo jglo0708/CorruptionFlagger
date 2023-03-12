@@ -233,7 +233,7 @@ def tune_corrflagger_asha(
     gpus_per_trial=1,
 ):
     config = {
-        "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
+        "learning_rate": tune.loguniform(1e-4, 1e-1),
         "weight_decay": tune.uniform(0, 0.1),
         "combine_last_layer": tune.choice([True, False]),
     }
