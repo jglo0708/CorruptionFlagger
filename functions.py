@@ -236,12 +236,12 @@ def tune_corrflagger_asha(
     gpus_per_trial=1,
 ):
     config = {
-        "learning_rate": tune.loguniform(1e-4, 1e-1),
+        "learning_rate": tune.sample_from(lambda spec: 10 ** (-10 * np.random.rand())),
         "weight_decay": tune.uniform(0, 0.1),
         "combine_last_layer": tune.choice([True, False]),
         # "batch_size": tune.choice([8, 16])
     }
-    scheduler = ASHAScheduler(max_t=num_epochs, grace_period=1, reduction_factor=2)
+    scheduler = ASHAScheduler(max_t=num_epochs, metric="f1_score", mode="max",)
 
     reporter = CLIReporter(
         parameter_columns=["combine_last_layer", "learning_rate", "weight_decay"],
@@ -261,11 +261,11 @@ def tune_corrflagger_asha(
     tuner = tune.Tuner(
         tune.with_resources(train_fn_with_parameters, resources=resources_per_trial),
         tune_config=tune.TuneConfig(
-            metric="loss",
-            mode="min",
-            search_alg=OptunaSearch(),
-            # scheduler=scheduler,
-            num_samples=10,
+            # metric="f1_score",
+            # mode="max",
+            # search_alg=OptunaSearch(),
+            scheduler=scheduler,
+            num_samples=20,
         ),
         run_config=air.RunConfig(
             name="tune_corrflagger_asha",

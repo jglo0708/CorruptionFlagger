@@ -11,6 +11,7 @@ import os
 from torch.nn import functional as F
 import pandas as pd
 import torch
+from ray import tune
 from torch.utils.data import DataLoader, Dataset
 
 from torchmetrics import AUROC, Accuracy, F1Score
@@ -395,7 +396,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         class_roc_auc = self.auroc(predictions, labels)
         accuracy_score = self.accuracy(predictions, labels)
         f1_score = self.f1(predictions, labels)
-
+        tune.report(f1_score=f1_score)
         self.log(
             "performance",
             {
