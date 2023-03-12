@@ -239,6 +239,10 @@ def tune_corrflagger_asha(
     }
     scheduler = ASHAScheduler(
         max_t=num_epochs,
+        time_attr='training_iteration',
+        grace_period=3,
+        reduction_factor=3,
+        brackets=1,
     )
 
     reporter = CLIReporter(
@@ -261,8 +265,8 @@ def tune_corrflagger_asha(
         tune_config=tune.TuneConfig(
             metric="f1_score",
             mode="max",
-            search_alg=OptunaSearch(),
-            # scheduler=scheduler,
+            # search_alg=OptunaSearch(),
+            scheduler=scheduler,
             num_samples=20,
         ),
         run_config=air.RunConfig(
