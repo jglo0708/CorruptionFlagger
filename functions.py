@@ -8,13 +8,12 @@ jan.globisz@studbocconi.it
 
 from ray import air, tune
 from ray.tune import CLIReporter
-from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+from ray.tune.schedulers import ASHAScheduler
 from ray.tune.integration.pytorch_lightning import (
     TuneReportCallback,
-    TuneReportCheckpointCallback,
 )
 
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 import pytorch_lightning as pl
 from ray.tune.search.optuna import OptunaSearch
@@ -159,10 +158,10 @@ def train_model(config, args, warmup_steps, total_training_steps, data_module, l
         n_warmup_steps=warmup_steps,
         n_training_steps=total_training_steps,
         bert_architecture=args.bert_architecture,
-        learning_rate=config['learning_rate'],
-        weight_decay=config['weight_decay'],
+        learning_rate=config["learning_rate"],
+        weight_decay=config["weight_decay"],
         label_columns=labels,
-        combine_last_layer=config['combine_last_layer'],
+        combine_last_layer=config["combine_last_layer"],
         non_text_cols=data_module.numerical_columns
         + data_module.train_df[data_module.categorical_columns].columns.tolist(),
     )
@@ -185,9 +184,7 @@ def train_model(config, args, warmup_steps, total_training_steps, data_module, l
             "model": args.bert_architecture,
         }
     )
-    tune_report_callback = TuneReportCallback(
-        {"loss": "val_loss"}, on="validation_end"
-    )
+    tune_report_callback = TuneReportCallback({"loss": "val_loss"}, on="validation_end")
 
     callbacks = [checkpoint_callback, tune_report_callback]
 
@@ -241,7 +238,11 @@ def tune_corrflagger_asha(
         "combine_last_layer": tune.choice([True, False]),
         # "batch_size": tune.choice([8, 16])
     }
-    scheduler = ASHAScheduler(max_t=num_epochs, metric="f1_score", mode="max",)
+    scheduler = ASHAScheduler(
+        max_t=num_epochs,
+        metric="f1_score",
+        mode="max",
+    )
 
     reporter = CLIReporter(
         parameter_columns=["combine_last_layer", "learning_rate", "weight_decay"],
@@ -270,11 +271,10 @@ def tune_corrflagger_asha(
         run_config=air.RunConfig(
             name="tune_corrflagger_asha",
             progress_reporter=reporter,
-            local_dir = '/home/student/jglobisz/CorruptionFlagger'
+            local_dir="/home/student/jglobisz/CorruptionFlagger",
         ),
         param_space=config,
     )
     results = tuner.fit()
 
     print("Best hyperparameters found were: ", results.get_best_result().config)
-
