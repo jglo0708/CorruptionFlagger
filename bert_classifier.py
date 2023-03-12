@@ -396,7 +396,7 @@ class ProcurementFlagsTagger(pl.LightningModule):
         class_roc_auc = self.auroc(predictions, labels)
         accuracy_score = self.accuracy(predictions, labels)
         f1_score = self.f1(predictions, labels)
-        tune.report(f1_score=f1_score)
+        tune.report(f1_score=f1_score.cpu())
         self.log(
             "performance",
             {
