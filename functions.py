@@ -262,8 +262,8 @@ def tune_corrflagger_asha(
     tuner = tune.Tuner(
         tune.with_resources(train_fn_with_parameters, resources=resources_per_trial),
         tune_config=tune.TuneConfig(
-            # metric="f1_score",
-            # mode="max",
+            metric="f1_score",
+            mode="max",
             # search_alg=OptunaSearch(),
             scheduler=scheduler,
             num_samples=20,
