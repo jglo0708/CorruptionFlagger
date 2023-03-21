@@ -29,7 +29,7 @@ from utils import is_local_files
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pytorch_lightning as pl
 
-
+os.environ['TRANSFORMERS_OFFLINE']='1'
 class ProcurementNoticeDataset(Dataset):
     def __init__(
         self,
