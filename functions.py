@@ -24,7 +24,6 @@ from utils import is_csv, is_local_files
 
 TEST_SIZE = 0.1
 
-
 def read_and_split(args):
     """
     Reads and splits the files into train, val, test sets
@@ -39,7 +38,28 @@ def read_and_split(args):
         assert (
             pathlib.Path(file).resolve().is_file()
         ), f"{file} should be a file (not dir)"
-        if not args.data_is_json:
+        if args.data_is_json:
+            with open(file) as json_file:
+                json_data = json.load(json_file)
+
+            train_df_tmp = pd.DataFrame.from_dict(json_data["train"], orient="index")
+            val_df_tmp = pd.DataFrame.from_dict(json_data["val"], orient="index")
+            test_df_tmp = pd.DataFrame.from_dict(json_data["test"], orient="index")
+
+            train_df = train_df.append(train_df_tmp)
+            val_df = val_df.append(val_df_tmp)
+            test_df = test_df.append(test_df_tmp)
+
+        elif args.data_is_pkl:
+            file_path = file.split("/")[-1].split(".")[0]
+            if file_path.split("_")[0] == "train":
+                train_df = pd.read_pickle(file)
+            elif file_path.split("_")[0] == "val":
+                val_df = pd.read_pickle(file)
+            elif file_path.split("_")[0] == "test":
+                test_df = pd.read_pickle(file)
+
+        else:
             assert is_csv(file), f"{file} should be a CSV file"
             df = pd.read_csv(file, sep=None)
             assert set(df.columns).issuperset(
@@ -62,32 +82,8 @@ def read_and_split(args):
             train_df_tmp.append(train_df_tmp)
             val_df.append(val_df_tmp)
             test_df.append(test_df_tmp)
-        else:
-            with open(file) as json_file:
-                json_data = json.load(json_file)
-
-            train_df_tmp = pd.DataFrame.from_dict(json_data["train"], orient="index")
-            val_df_tmp = pd.DataFrame.from_dict(json_data["val"], orient="index")
-            test_df_tmp = pd.DataFrame.from_dict(json_data["test"], orient="index")
-
-            train_df_tmp.rename(
-                columns={args.label_column: "label_encoded", args.text_column: "text"},
-                inplace=True,
-            )
-            val_df_tmp.rename(
-                columns={args.label_column: "label_encoded", args.text_column: "text"},
-                inplace=True,
-            )
-            test_df_tmp.rename(
-                columns={args.label_column: "label_encoded", args.text_column: "text"},
-                inplace=True,
-            )
-            train_df = train_df.append(train_df_tmp)
-            val_df = val_df.append(val_df_tmp)
-            test_df = test_df.append(test_df_tmp)
 
     return train_df, val_df, test_df
-
 
 def process_data(args, train_df, val_df, test_df):
     """

@@ -5,6 +5,8 @@ import string
 
 import numpy as np
 import torch
+import os.path
+from os import path
 
 
 def calc_steps(df, args):
@@ -37,7 +39,6 @@ def is_csv(infile):
 def seed_everything(seed=42):
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
-
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -51,3 +52,37 @@ def is_local_files(path):
         return True
     else:
         return False
+
+def is_local_files(path):
+    if len(path.split("/")) > 1:
+        return True
+    else:
+        return False
+
+def get_cols(args):
+    if path.exists(args.text_columns_dir):
+
+        with open(args.text_columns_dir) as file:
+            text_columns = [line.rstrip() for line in file]
+    else:
+        text_columns = []
+    if path.exists(args.label_columns_dir):
+        with open(args.label_columns_dir) as file:
+            label_columns = [line.rstrip() for line in file]
+    else:
+        label_columns = []
+
+    if path.exists(args.numerical_columns_dir):
+
+        with open(args.numerical_columns_dir) as file:
+            numerical_columns = [line.rstrip() for line in file]
+    else:
+        numerical_columns = []
+    if path.exists(args.categorical_columns_dir):
+        with open(args.categorical_columns_dir) as file:
+            categorical_columns = [line.rstrip() for line in file]
+    else:
+        categorical_columns = []
+
+
+    return label_columns, text_columns, numerical_columns, categorical_columns
