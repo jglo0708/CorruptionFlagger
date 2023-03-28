@@ -31,7 +31,7 @@ class ProcurementNoticeDataset(Dataset):
         self,
         df: pd.DataFrame,
         bert_architecture: str = "distilbert-base-multilingual-cased",
-
+        labels:str = 'risky',
         max_sequence_len: int = 256,
     ):
         if is_local_files(bert_architecture):
@@ -42,6 +42,7 @@ class ProcurementNoticeDataset(Dataset):
             self.tokenizer = AutoTokenizer.from_pretrained(bert_architecture)
 
         self.df = df
+        self.labels = labels
         self.max_sequence_len = max_sequence_len
 
     def __len__(self):
@@ -50,7 +51,8 @@ class ProcurementNoticeDataset(Dataset):
     def __getitem__(self, index: int):
         data_row = self.df.iloc[index]
         notice_text = data_row.text
-        labels = torch.tensor(int(data_row["label_encoded"])).long()
+
+        labels = torch.tensor(int(data_row[self.labels])).long()
 
         encoding = self.tokenizer.encode_plus(
             notice_text,

@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from functions import read_and_split, process_data
+from functions import read_and_split, process_data, run_model
 from utils import calc_steps, seed_everything, get_cols
 import warnings
 
@@ -21,18 +21,12 @@ def main(args):
         train_df,
         val_df,
         test_df,
-        label_columns,
-        text_columns,
-        numerical_columns,
-        categorical_columns,
     )
     total_training_steps, warmup_steps = calc_steps(train_df, args)
     logging.info("Model fine-tuning start")
 
-    learning_rates = [1e-4, 1e-5, 1e-6, 1e-7]
-    for lr in learning_rates:
-        train_model(
-            args, lr, total_training_steps, warmup_steps, data_module, label_columns
+    run_model(
+            args, warmup_steps, total_training_steps, data_module
         )
     logger.info("Fine-tuning complete!")
 
