@@ -5,7 +5,6 @@ Contact: Jan Globisz
 jan.globisz@studbocconi.it
 
 """
-
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 import pytorch_lightning as pl
@@ -23,6 +22,8 @@ from bert_classifier import (
 from utils import is_csv, is_local_files
 
 TEST_SIZE = 0.1
+RANDOM_SEED = 42
+
 
 def read_and_split(args):
     """
